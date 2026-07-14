@@ -1,6 +1,6 @@
 # Vibecat: Userscript Development Sync & Hot-Reload Emulation
 
-A standalone, secure, and lightweight WebSocket sync server and drop-in client module designed specifically for developers and autonomous AI agents. It establishes an instant, direct hot-reload link between local workspace files and active browser userscript managers (such as Tampermonkey or ScriptCat) without requiring official editor extensions.
+A standalone, secure, and lightweight WebSocket sync server and drop-in client module designed specifically for developers and autonomous AI agents. It establishes an instant, direct hot-reload link between local workspace files and active browser userscript managers (such as Tampermonkey or the official [ScriptCat](https://github.com/scriptscat/scriptcat)) without requiring official editor extensions.
 
 ---
 
