@@ -1,5 +1,5 @@
 ---
-name: sync-scriptcat-userscripts
+name: vibecat
 description: Operate the standalone ScriptCat userscript development server to start or stop synchronization, watch and update a .user.js file, verify ScriptCat handshakes and delivery, and consume live userscript console/errors without browser-control access. Use for ScriptCat hot reload, userscript synchronization, local userscript development, IMDb-style live proofs, browser-console diagnostics, or autonomous agents editing userscripts while Chrome and ScriptCat run separately.
 ---
 
