@@ -17,25 +17,33 @@ $SkillDir
 
 Verify `sync-server.js`, `package.json`, and the target `.user.js` exist. Treat the target file as the source of truth. Do not use raw `.user.ts` unless a separate build step already produces executable `.user.js`.
 
-Set `$SkillDir` to this skill's directory. Use `scripts/manage-sync.ps1` for process operations instead of reconstructing PID and port logic.
+Set `$SkillDir` to this skill's directory. Use the cross-platform Node.js script `scripts/manage-sync.js` (preferred) or the PowerShell helper `scripts/manage-sync.ps1` for process operations instead of reconstructing PID and port logic.
 
 ## Run the workflow
 
-1. Run the helper with `-Action status`.
+1. Run the helper with `status` action.
 2. If dependencies are missing, run `npm install` in the sync project and validate the result.
-3. Start one server with `-Action start -ScriptPath <path>`. Reuse an existing verified server; never start a duplicate on port 8642.
+3. Start one server with `start <path>` action. Reuse an existing verified server; never start a duplicate on port 8642.
 4. Call synchronization **ready** only when the verified server PID owns `127.0.0.1:8642`, health is `ok`, `websocket_clients >= 1`, and `ScriptCat handshake confirmed` appears in a stdout log written after that PID's start time.
 5. Inspect the target userscript and preserve operator-owned edits. Make requested source changes with atomic staged replacement and validate JavaScript before moving it into place.
 6. Wait up to 10 seconds for one `Synced <file> (... <n> client(s), sha256:<prefix>)` record with at least one client. A content-identical save is intentionally suppressed; a read-only audit can prove readiness but cannot prove a fresh delivery.
 7. Read records appended after the relevant delivery from `.runtime/userscript-console.jsonl`. Correlate by script URI, version, source hash, and `received_at >= delivery time`. Never use records from a previous server process or earlier delivery as proof of current-session execution. Report `error` and `unhandledrejection` records before ordinary console messages.
 8. Recheck health and run relevant project tests before reporting completion.
 
-Example helper calls:
+Example helper calls (Node.js):
+
+```bash
+node "$SkillDir/scripts/manage-sync.js" status
+node "$SkillDir/scripts/manage-sync.js" start "example.user.js"
+node "$SkillDir/scripts/manage-sync.js" health
+node "$SkillDir/scripts/manage-sync.js" stop
+```
+
+Example helper calls (PowerShell):
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "$SkillDir\scripts\manage-sync.ps1" -Action status
-powershell -NoProfile -ExecutionPolicy Bypass -File "$SkillDir\scripts\manage-sync.ps1" -Action start -ScriptPath "D:\path\example.user.js"
-powershell -NoProfile -ExecutionPolicy Bypass -File "$SkillDir\scripts\manage-sync.ps1" -Action health
+powershell -NoProfile -ExecutionPolicy Bypass -File "$SkillDir\scripts\manage-sync.ps1" -Action start -ScriptPath "example.user.js"
 powershell -NoProfile -ExecutionPolicy Bypass -File "$SkillDir\scripts\manage-sync.ps1" -Action stop
 ```
 
