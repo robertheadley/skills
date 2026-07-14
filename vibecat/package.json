@@ -1,0 +1,14 @@
+{
+  "name": "vibecat",
+  "version": "1.2.0",
+  "description": "Standalone WebSocket development server and client hot-reload integration for Tampermonkey / ScriptCat userscripts.",
+  "main": "sync-server.js",
+  "scripts": {
+    "start": "node sync-server.js"
+  },
+  "dependencies": {
+    "ws": "^8.16.0"
+  },
+  "author": "Antigravity",
+  "license": "MIT"
+}
