@@ -21,6 +21,7 @@ VibeCat is a standalone ScriptCat userscript live-sync and hot-reload server. De
 
 ### 4. Interactive Live-Command Console (REPL)
 *   **What it is**: A two-way interactive command bridge. Any JavaScript statement typed into the sync server's terminal standard input (`stdin`) is broadcast to connected browser pages, executed in the page's global scope, and the returned evaluation result is logged back in the terminal.
+    *   **Multi-line Statements**: If a line ends with a backslash `\`, VibeCat buffers the input and displays a continuation prompt `... ` so you can write function blocks, loops, or complex statements before evaluation.
 *   **Why it exists**: Allows developers and autonomous agents to query page state, trigger button clicks, read storage, and modify variables dynamically directly from a terminal prompt without switching contexts to the browser window.
 
 ### 5. Stdout Color Logger & Context Filter
@@ -94,20 +95,24 @@ node sync-server.js --no-console path/to/your-script.user.js
 
 ## 🔌 Browser Client Integration
 
-### 1. Header Metadata Requirement
-Verify the following headers are present in your script's metadata block:
-```javascript
-// @grant        GM_xmlhttpRequest
-// @grant        GM_addStyle
-```
+VibeCat is fully dependency-free and does not require any special `@grant` headers to run.
 
-### 2. Insert Client Module
-Copy the contents of [sync-client-template.js](sync-client-template.js) and paste it at the bottom of your userscript file. If the userscript is wrapped in an IIFE, paste it inside the closing IIFE brackets (`})();`) to ensure the sandboxed console overrides attach correctly.
-*   Every time you save the script locally, the sync server will push the changes and the browser page will instantly refresh.
-*   To export a clean version for production, run:
-    ```bash
-    node scripts/export-production.js path/to/your-script.user.js
-    ```
+### Option A: ScriptCat (Automatic Synchronization)
+1. Open the ScriptCat dashboard, navigate to settings, and verify **Developer Mode Connection** is active (defaulting to port `8642`).
+2. Run the sync server. ScriptCat will automatically discover VibeCat, receive the compiled userscript payload (with the client pre-injected), and install/update it in the browser dashboard.
+
+### Option B: Tampermonkey / Violentmonkey (Universal Setup)
+1. Run the sync server watching your local userscript.
+2. In your web browser, navigate to the local install endpoint:
+   `http://127.0.0.1:8642/sync.user.js`
+3. Your userscript manager will automatically intercept the javascript request, display the script installation/update confirmation page, and begin tracking code saves.
+
+### Manual Injection (Optional)
+If you prefer not to use automatic injection, you can copy the contents of [sync-client-template.js](sync-client-template.js) and paste them directly at the bottom of your userscript file. If the userscript is wrapped in an IIFE, paste it inside the closing brackets (`})();`) so console overrides bind correctly.
+* To export a clean, production-ready script with all VibeCat debugger code automatically stripped out, run:
+  ```bash
+  node scripts/export-production.js path/to/your-script.user.js
+  ```
 
 ---
 

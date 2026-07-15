@@ -63,14 +63,16 @@ Use:
 
 ```text
 http://127.0.0.1:8642/debug/health
+http://127.0.0.1:8642/sync.user.js
 .runtime/userscript-console.jsonl
 .runtime/sync-server.stdout.log
 .runtime/sync-server.stderr.log
 ```
 
-Console diagnostics are enabled by default. Use `--no-console` only when explicitly requested or when instrumentation conflicts with a top-level `console` binding. Never print or persist the session bearer token yourself.
-
-If you need to identify or target a specific DOM element for automation, scripting, or debugging, type `/select [prompt]` in the server standard input REPL. This will start the interactive Element Picker in the browser. The operator can hover, select/lock an element, input an instruction, and return the computed CSS selector and instruction text directly back to the terminal.
+- **HTTP Install Route**: The server hosts the fully-injected userscript at `/sync.user.js`. Opening this URL in the browser triggers installation in all standard userscript managers (Tampermonkey, Violentmonkey, etc.).
+- **Console Diagnostics**: Enabled by default. Use `--no-console` only when explicitly requested or when instrumentation conflicts with a top-level `console` binding. Never print or persist the session bearer token yourself.
+- **Dynamic Element Picker**: If you need to identify or target a specific DOM element for automation, scripting, or debugging, type `/select [prompt]` in the server standard input REPL. This will start the interactive Element Picker in the browser. The operator can hover, select/lock an element, input an instruction, and return the computed CSS selector and instruction text directly back to the terminal.
+- **Multi-line REPL**: If you need to execute multi-line JavaScript statements on page context, append a backslash `\` at the end of each continuation line in standard input. The server will buffer and execute them together once a line without a backslash is submitted.
 
 ## Safety and completion
 

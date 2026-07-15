@@ -154,7 +154,7 @@ const clients = new Set();
 
 // Create HTTP Server to serve health status and share port with WebSocket
 const server = http.createServer((req, res) => {
-    const parsedUrl = url.parse(req.url);
+    const parsedUrl = url.parse(req.url, true);
     if (parsedUrl.pathname === '/debug/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
@@ -169,6 +169,33 @@ const server = http.createServer((req, res) => {
                 last_event_at: null
             }
         }));
+    } else if (parsedUrl.pathname === '/sync.user.js') {
+        let targetFile = fileToWatch;
+        if (isDirectoryMode) {
+            const files = fs.readdirSync(fileToWatch).filter(f => f.endsWith('.user.js'));
+            if (files.length > 0) {
+                targetFile = path.join(fileToWatch, files[0]);
+            }
+        }
+        if (fs.existsSync(targetFile)) {
+            try {
+                const rawCode = fs.readFileSync(targetFile, 'utf-8');
+                const { code } = getFinalCodeForFile(rawCode, targetFile);
+                res.writeHead(200, { 
+                    'Content-Type': 'text/javascript; charset=utf-8',
+                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                    'Pragma': 'no-cache',
+                    'Expires': '0'
+                });
+                res.end(code);
+            } catch (e) {
+                res.writeHead(500, { 'Content-Type': 'text/plain' });
+                res.end('Internal Server Error: ' + e.message);
+            }
+        } else {
+            res.writeHead(404, { 'Content-Type': 'text/plain' });
+            res.end('Userscript file not found');
+        }
     } else {
         res.writeHead(404);
         res.end();
@@ -470,10 +497,24 @@ if (isDirectoryMode) {
     });
 }
 
+let replBuffer = '';
+
 // Interactive Live-Command Console (REPL) Standard Input Stream Reader
 process.stdin.setEncoding('utf-8');
 process.stdin.on('data', (data) => {
-    const code = data.trim();
+    const rawLine = data.toString();
+    const cleanLine = rawLine.trim();
+    if (!cleanLine && !replBuffer) return;
+
+    if (cleanLine.endsWith('\\')) {
+        replBuffer += rawLine.substring(0, rawLine.lastIndexOf('\\')) + '\n';
+        process.stdout.write('\x1b[34m... \x1b[0m');
+        return;
+    }
+
+    const code = (replBuffer + rawLine).trim();
+    replBuffer = '';
+    
     if (!code) return;
 
     if (code.startsWith('/select')) {

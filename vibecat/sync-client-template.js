@@ -2,9 +2,7 @@
  * Standalone Userscript Hot-Reload & Sync Client
  * 
  * Drop this code block inside your userscript (or at the very end).
- * Make sure the following metadata is included in your userscript headers:
- * // @grant        GM_xmlhttpRequest
- * // @grant        GM_addStyle
+ * This client is fully dependency-free and does not require any @grant headers.
  */
 (function() {
     'use strict';
