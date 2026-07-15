@@ -256,18 +256,23 @@ wss.on('connection', (ws, req) => {
 
                 fs.appendFileSync(consoleLogPath, JSON.stringify(logRecord) + '\n');
 
-                // Live Terminal Console Relay
-                const level = logRecord.level;
-                const msgText = logRecord.message;
-                const timeStr = new Date().toLocaleTimeString();
-                let color = '\x1b[0m'; // Default reset
-                if (level === 'error') color = '\x1b[31m'; // Red
-                else if (level === 'warn') color = '\x1b[33m'; // Yellow
-                else if (level === 'info') color = '\x1b[36m'; // Cyan
-                else if (level === 'log') color = '\x1b[32m'; // Green
-                else if (level === 'unhandledrejection') color = '\x1b[35m'; // Magenta
+                // Live Terminal Console Relay (Filtered to avoid context window flooding)
+                const isError = logRecord.level === 'error' || logRecord.level === 'unhandledrejection';
+                const isUserscriptLog = logRecord.message.startsWith('[') || logRecord.message.includes('[Sync Client]');
 
-                console.log(`[Browser Console ${timeStr}] [${level.toUpperCase()}] ${color}${msgText}\x1b[0m`);
+                if (isError || isUserscriptLog) {
+                    const level = logRecord.level;
+                    const msgText = logRecord.message;
+                    const timeStr = new Date().toLocaleTimeString();
+                    let color = '\x1b[0m'; // Default reset
+                    if (level === 'error') color = '\x1b[31m'; // Red
+                    else if (level === 'warn') color = '\x1b[33m'; // Yellow
+                    else if (level === 'info') color = '\x1b[36m'; // Cyan
+                    else if (level === 'log') color = '\x1b[32m'; // Green
+                    else if (level === 'unhandledrejection') color = '\x1b[35m'; // Magenta
+
+                    console.log(`[Browser Console ${timeStr}] [${level.toUpperCase()}] ${color}${msgText}\x1b[0m`);
+                }
 
             } else if (data.action === 'eval_result') {
                 const status = data.data.status;
