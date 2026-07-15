@@ -109,7 +109,15 @@ function getFinalCode(rawCode) {
                 /let scriptHash = 'unknown';/,
                 `let scriptHash = '${sha256}';`
             );
-            finalCode = code + '\n\n// --- VibeCat Auto-Injected Sync Client ---\n' + clientCode;
+            // Try to inject inside the main IIFE if one exists at the end of the userscript code
+            const iifeMatch = code.trim().match(/(\}\)\s*\(\s*\)\s*;?\s*)$/);
+            if (iifeMatch) {
+                const trimmedCode = code.trim();
+                const index = trimmedCode.lastIndexOf(iifeMatch[1]);
+                finalCode = trimmedCode.substring(0, index) + '\n\n// --- VibeCat Auto-Injected Sync Client ---\n' + clientCode + '\n' + iifeMatch[1] + '\n';
+            } else {
+                finalCode = code + '\n\n// --- VibeCat Auto-Injected Sync Client ---\n' + clientCode;
+            }
         }
     }
     return { code: finalCode, info };
