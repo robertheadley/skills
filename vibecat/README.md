@@ -31,6 +31,10 @@ VibeCat is a standalone ScriptCat userscript live-sync and hot-reload server. De
 *   **What it is**: A CLI tool (`scripts/export-production.js`) that automatically strips developer-only blocks (marked between `// DEVONLY_START` and `// DEVONLY_END`), disables the hot-reload flag, and saves a clean userscript output to a `dist/` directory.
 *   **Why it exists**: Ensures that when your script is ready for public release, all local server connection hooks, diagnostic console overrides, and test banners are cleanly removed, reducing bundle size and protecting credentials.
 
+### 7. Interactive Element Picker & Instruction Loop
+*   **What it is**: Start the element picker by entering `/select [optional prompt]` in the server's standard input REPL. Connected browsers display a glassmorphism floating banner and draw a dynamic bounding box outline around hovered elements. Clicking an element locks it and opens a text input field for instructions (e.g., "Change this text to red"). Pressing Enter sends the element's CSS selector, tag name, text content snippet, and instructions directly back to the local terminal.
+*   **Why it exists**: Streamlines human-in-the-loop automation. Instead of guessing classes or IDs, the agent can prompt the operator to pick a target element and describe what needs to be changed, automatically piping the selector and task instructions back to the agent's context.
+
 ---
 
 ## 🛠️ Remote DevTools Bridge (Universal Browser Automation)

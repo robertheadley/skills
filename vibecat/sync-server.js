@@ -281,6 +281,20 @@ wss.on('connection', (ws, req) => {
                 const prefix = status === 'success' ? '✔ Result:' : '❌ Error:';
                 console.log(`[REPL Result] ${color}${prefix} ${result}\x1b[0m`);
 
+            } else if (data.action === 'element_selected') {
+                const status = data.data.status;
+                if (status === 'success') {
+                    const selector = data.data.selector;
+                    const message = data.data.message || '(no instructions)';
+                    const tagName = data.data.tagName || '';
+                    const text = data.data.textContent || '';
+                    console.log(`\n\x1b[32m[Element Picker] 🎯 Selector: ${selector}\x1b[0m`);
+                    console.log(`\x1b[36m[Element Picker] 💬 Message:  ${message}\x1b[0m`);
+                    console.log(`\x1b[90m[Element Picker] Element:   <${tagName.toLowerCase()}> "${text}"\x1b[0m\n`);
+                } else {
+                    console.log(`\n\x1b[31m[Element Picker] ❌ Selection cancelled: ${data.data.message}\x1b[0m\n`);
+                }
+
             } else if (data.action === 'dom_report') {
                 // Safely accept and write DOM snapshot report
                 const filename = ws.requestedFilename || (isDirectoryMode ? 'userscript' : path.basename(fileToWatch, '.user.js'));
@@ -397,6 +411,25 @@ process.stdin.setEncoding('utf-8');
 process.stdin.on('data', (data) => {
     const code = data.trim();
     if (!code) return;
+
+    if (code.startsWith('/select')) {
+        const promptText = code.substring(7).trim() || 'Select an element on the page';
+        console.log(`\x1b[34m[REPL] Activating Element Picker: "${promptText}"\x1b[0m`);
+        let clientCount = 0;
+        for (const ws of clients) {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    action: 'select_element',
+                    data: { prompt: promptText }
+                }));
+                clientCount++;
+            }
+        }
+        if (clientCount === 0) {
+            console.log(`\x1b[33m⚠️ No active clients connected to activate picker.\x1b[0m`);
+        }
+        return;
+    }
 
     console.log(`\x1b[34m[REPL] Sending JavaScript to clients: ${code}\x1b[0m`);
     

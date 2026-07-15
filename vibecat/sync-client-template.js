@@ -80,6 +80,356 @@
 
     let receivedInitialHandshake = false;
 
+    let pickerInstance = null;
+
+    class VibeCatElementPicker {
+        constructor(promptText) {
+            this.promptText = promptText || 'Select an element on the page';
+            this.activeElement = null;
+            this.hoveredElement = null;
+            this.isLocked = false;
+            
+            this.overlay = null;
+            this.banner = null;
+            this.styleEl = null;
+            
+            this.handleMouseOver = this.handleMouseOver.bind(this);
+            this.handleClick = this.handleClick.bind(this);
+            this.handleKeyDown = this.handleKeyDown.bind(this);
+        }
+        
+        start() {
+            if (pickerInstance) pickerInstance.destroy();
+            pickerInstance = this;
+            
+            this.injectStyles();
+            this.createUI();
+            
+            document.addEventListener('mouseover', this.handleMouseOver, true);
+            document.addEventListener('click', this.handleClick, true);
+            document.addEventListener('keydown', this.handleKeyDown, true);
+        }
+        
+        destroy() {
+            document.removeEventListener('mouseover', this.handleMouseOver, true);
+            document.removeEventListener('click', this.handleClick, true);
+            document.removeEventListener('keydown', this.handleKeyDown, true);
+            
+            if (this.overlay) this.overlay.remove();
+            if (this.banner) this.banner.remove();
+            if (this.styleEl) this.styleEl.remove();
+            
+            if (pickerInstance === this) pickerInstance = null;
+        }
+        
+        injectStyles() {
+            this.styleEl = document.createElement('style');
+            this.styleEl.id = '__vibecat_picker_styles';
+            this.styleEl.textContent = `
+                .__vibecat_overlay {
+                    position: fixed;
+                    pointer-events: none;
+                    z-index: 9999998;
+                    background: rgba(59, 130, 246, 0.15);
+                    border: 2px dashed #3b82f6;
+                    border-radius: 4px;
+                    transition: all 0.08s ease-out;
+                    box-sizing: border-box;
+                }
+                .__vibecat_overlay.locked {
+                    background: rgba(16, 185, 129, 0.15);
+                    border: 2px solid #10b981;
+                }
+                .__vibecat_tooltip {
+                    position: absolute;
+                    bottom: calc(100% + 6px);
+                    left: 0;
+                    background: #1e293b;
+                    color: #3b82f6;
+                    border: 1px solid rgba(59, 130, 246, 0.3);
+                    padding: 4px 8px;
+                    border-radius: 4px;
+                    font-size: 11px;
+                    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+                    white-space: nowrap;
+                    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+                    pointer-events: none;
+                }
+                .__vibecat_overlay.locked .__vibecat_tooltip {
+                    color: #10b981;
+                    border-color: rgba(16, 185, 129, 0.3);
+                }
+                .__vibecat_banner {
+                    position: fixed;
+                    top: 20px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    z-index: 9999999;
+                    background: rgba(15, 23, 42, 0.85);
+                    backdrop-filter: blur(12px);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    color: #f8fafc;
+                    padding: 12px 20px;
+                    border-radius: 12px;
+                    font-family: system-ui, -apple-system, sans-serif;
+                    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.5);
+                    display: flex;
+                    align-items: center;
+                    gap: 16px;
+                    font-size: 13px;
+                    width: max-content;
+                    max-width: 90vw;
+                    box-sizing: border-box;
+                    animation: vibecat-slide-down 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+                }
+                @keyframes vibecat-slide-down {
+                    0% { transform: translate(-50%, -120%); opacity: 0; }
+                    100% { transform: translate(-50%, 0); opacity: 1; }
+                }
+                .__vibecat_banner_input {
+                    background: rgba(255, 255, 255, 0.08);
+                    border: 1px solid rgba(255, 255, 255, 0.15);
+                    border-radius: 6px;
+                    color: #fff;
+                    padding: 6px 12px;
+                    font-size: 13px;
+                    width: 250px;
+                    outline: none;
+                    transition: border-color 0.2s, background 0.2s;
+                }
+                .__vibecat_banner_input:focus {
+                    border-color: #3b82f6;
+                    background: rgba(255, 255, 255, 0.12);
+                }
+                .__vibecat_banner_input:disabled {
+                    opacity: 0.5;
+                    cursor: not-allowed;
+                }
+                .__vibecat_banner_btn {
+                    background: #3b82f6;
+                    color: #fff;
+                    border: none;
+                    border-radius: 6px;
+                    padding: 6px 14px;
+                    font-size: 13px;
+                    font-weight: 500;
+                    cursor: pointer;
+                    transition: background 0.2s;
+                }
+                .__vibecat_banner_btn:hover {
+                    background: #2563eb;
+                }
+                .__vibecat_banner_btn:disabled {
+                    background: rgba(255, 255, 255, 0.1);
+                    color: rgba(255, 255, 255, 0.3);
+                    cursor: not-allowed;
+                }
+                .__vibecat_banner_close {
+                    background: none;
+                    border: none;
+                    color: #94a3b8;
+                    cursor: pointer;
+                    font-size: 16px;
+                    padding: 0 4px;
+                }
+                .__vibecat_banner_close:hover {
+                    color: #f8fafc;
+                }
+            `;
+            (document.head || document.documentElement).appendChild(this.styleEl);
+        }
+        
+        createUI() {
+            this.overlay = document.createElement('div');
+            this.overlay.className = '__vibecat_overlay';
+            this.overlay.style.display = 'none';
+            
+            this.tooltip = document.createElement('div');
+            this.tooltip.className = '__vibecat_tooltip';
+            this.overlay.appendChild(this.tooltip);
+            document.body.appendChild(this.overlay);
+            
+            this.banner = document.createElement('div');
+            this.banner.className = '__vibecat_banner';
+            this.banner.innerHTML = `
+                <span style="color: #3b82f6; display: flex; align-items: center; transition: color 0.3s;">●</span>
+                <span style="font-weight: 500;">${this.promptText}</span>
+                <input type="text" class="__vibecat_banner_input" placeholder="Type instructions for the agent..." disabled />
+                <button class="__vibecat_banner_btn" disabled>Send to Agent</button>
+                <button class="__vibecat_banner_close" title="Cancel (Esc)">×</button>
+            `;
+            
+            this.inputEl = this.banner.querySelector('.__vibecat_banner_input');
+            this.btnEl = this.banner.querySelector('.__vibecat_banner_btn');
+            this.closeEl = this.banner.querySelector('.__vibecat_banner_close');
+            
+            this.btnEl.onclick = () => this.submit();
+            this.closeEl.onclick = () => this.cancel();
+            
+            this.inputEl.onkeydown = (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.submit();
+                } else if (e.key === 'Escape') {
+                    this.cancel();
+                }
+            };
+            
+            document.body.appendChild(this.banner);
+        }
+        
+        handleMouseOver(e) {
+            if (this.isLocked) return;
+            
+            const target = e.target;
+            if (target === this.overlay || target === this.banner || this.banner.contains(target)) {
+                return;
+            }
+            
+            this.hoveredElement = target;
+            this.updateOverlay(target);
+        }
+        
+        updateOverlay(el) {
+            const rect = el.getBoundingClientRect();
+            const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            
+            this.overlay.style.width = `${rect.width}px`;
+            this.overlay.style.height = `${rect.height}px`;
+            this.overlay.style.left = `${rect.left + scrollLeft}px`;
+            this.overlay.style.top = `${rect.top + scrollTop}px`;
+            this.overlay.style.display = 'block';
+            
+            const selector = this.getSelector(el);
+            this.tooltip.textContent = `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''} | ${selector}`;
+        }
+        
+        handleClick(e) {
+            const target = e.target;
+            if (target === this.banner || this.banner.contains(target)) {
+                return;
+            }
+            
+            e.preventDefault();
+            e.stopPropagation();
+            
+            if (target === this.overlay) {
+                if (this.hoveredElement) {
+                    this.lockElement(this.hoveredElement);
+                }
+                return;
+            }
+            
+            this.lockElement(target);
+        }
+        
+        lockElement(el) {
+            this.activeElement = el;
+            this.isLocked = true;
+            this.overlay.className = '__vibecat_overlay locked';
+            this.updateOverlay(el);
+            
+            this.inputEl.removeAttribute('disabled');
+            this.btnEl.removeAttribute('disabled');
+            this.inputEl.focus();
+            
+            const dot = this.banner.querySelector('span');
+            if (dot) dot.style.color = '#10b981';
+        }
+        
+        handleKeyDown(e) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                this.cancel();
+            }
+        }
+        
+        getSelector(el) {
+            if (!(el instanceof Element)) return '';
+            const path = [];
+            let current = el;
+            while (current && current.nodeType === Node.ELEMENT_NODE) {
+                let selector = current.nodeName.toLowerCase();
+                if (current.id) {
+                    try {
+                        if (document.querySelectorAll('#' + CSS.escape(current.id)).length === 1) {
+                            selector = '#' + CSS.escape(current.id);
+                            path.unshift(selector);
+                            break;
+                        }
+                    } catch(e) {}
+                }
+                
+                let className = '';
+                if (current.classList && current.classList.length > 0) {
+                    const classes = Array.from(current.classList)
+                        .filter(c => !c.startsWith('__vibecat'))
+                        .map(c => '.' + CSS.escape(c))
+                        .join('');
+                    if (classes) {
+                        selector += classes;
+                    }
+                }
+                
+                let sib = current;
+                let nth = 1;
+                while (sib = sib.previousElementSibling) {
+                    if (sib.nodeName.toLowerCase() === current.nodeName.toLowerCase()) {
+                        nth++;
+                    }
+                }
+                
+                let parent = current.parentElement;
+                if (parent) {
+                    const siblings = Array.from(parent.children).filter(child => child.nodeName === current.nodeName);
+                    if (siblings.length > 1) {
+                        selector += `:nth-of-type(${nth})`;
+                    }
+                }
+                
+                path.unshift(selector);
+                current = current.parentElement;
+            }
+            return path.join(' > ');
+        }
+        
+        submit() {
+            if (!this.activeElement) return;
+            
+            const selector = this.getSelector(this.activeElement);
+            const userMsg = this.inputEl.value.trim();
+            const tagName = this.activeElement.tagName;
+            const textContent = this.activeElement.textContent ? this.activeElement.textContent.trim().substring(0, 100) : '';
+            
+            socket.send(JSON.stringify({
+                action: 'element_selected',
+                data: {
+                    status: 'success',
+                    selector: selector,
+                    message: userMsg,
+                    tagName: tagName,
+                    textContent: textContent
+                }
+            }));
+            
+            this.destroy();
+        }
+        
+        cancel() {
+            socket.send(JSON.stringify({
+                action: 'element_selected',
+                data: {
+                    status: 'cancelled',
+                    message: 'Selection cancelled by user'
+                }
+            }));
+            
+            this.destroy();
+        }
+    }
+
     socket.onopen = () => {
         console.log('[Sync Client] Socket connection established.');
     };
@@ -92,6 +442,13 @@
                 console.log('[Sync Client] Handshake received.');
                 scriptVersion = message.version || scriptVersion;
                 scriptHash = message.hash || scriptHash;
+                return;
+            }
+
+            if (message.action === 'select_element') {
+                const promptText = message.data ? message.data.prompt : null;
+                const picker = new VibeCatElementPicker(promptText);
+                picker.start();
                 return;
             }
 

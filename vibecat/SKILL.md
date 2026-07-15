@@ -70,6 +70,8 @@ http://127.0.0.1:8642/debug/health
 
 Console diagnostics are enabled by default. Use `--no-console` only when explicitly requested or when instrumentation conflicts with a top-level `console` binding. Never print or persist the session bearer token yourself.
 
+If you need to identify or target a specific DOM element for automation, scripting, or debugging, type `/select [prompt]` in the server standard input REPL. This will start the interactive Element Picker in the browser. The operator can hover, select/lock an element, input an instruction, and return the computed CSS selector and instruction text directly back to the terminal.
+
 ## Safety and completion
 
 - Keep the listener on `127.0.0.1`; never broaden it to LAN interfaces.
@@ -78,3 +80,4 @@ Console diagnostics are enabled by default. Use `--no-console` only when explici
 - Treat console output as potentially sensitive and quote only what is necessary.
 - Record non-trivial project work in `docs/EXECUTION_LOGS.md` and `docs/CHANGELOG.agent.md`.
 - State separately: source changed, ScriptCat received it, runtime console proved execution, and visual behavior was or was not verified.
+
