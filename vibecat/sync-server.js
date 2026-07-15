@@ -63,7 +63,7 @@ function getScriptInfo(code) {
     const meta = code.match(/\/\/ ==UserScript==([\s\S]*?)\/\/ ==\/UserScript==/);
     if (!meta) return null;
 
-    const info = { name: '', namespace: '', uuid: '', version: '' };
+    const info = { name: '', namespace: '', uuid: '', version: '', matches: [], includes: [] };
     const lines = meta[1].split('\n');
     for (let line of lines) {
         line = line.trim();
@@ -75,9 +75,30 @@ function getScriptInfo(code) {
             info.uuid = line.replace('// @uuid ', '').trim();
         } else if (line.startsWith('// @version ')) {
             info.version = line.replace('// @version ', '').trim();
+        } else if (line.startsWith('// @match ')) {
+            info.matches.push(line.replace('// @match ', '').trim());
+        } else if (line.startsWith('// @include ')) {
+            info.includes.push(line.replace('// @include ', '').trim());
         }
     }
     return info;
+}
+
+function matchPatternToRegex(pattern) {
+    try {
+        const parts = pattern.split('://');
+        if (parts.length < 2) return null;
+        const scheme = parts[0];
+        const hostAndPath = parts[1];
+        const firstSlash = hostAndPath.indexOf('/');
+        const host = firstSlash === -1 ? hostAndPath : hostAndPath.substring(0, firstSlash);
+        
+        let schemeRegex = scheme === '*' ? 'https?' : scheme;
+        let hostRegex = host.replace(/\./g, '\\.').replace(/\*/g, '[^/]*');
+        return new RegExp(`^${schemeRegex}://${hostRegex}$`, 'i');
+    } catch (e) {
+        return null;
+    }
 }
 
 function getSha256(content) {
@@ -189,6 +210,63 @@ wss.on('connection', (ws, req) => {
         clientFilename = clientPathname;
     }
     ws.requestedFilename = clientFilename;
+
+    if (bearerToken) {
+        // Enforce strict token matching if bearertoken is set in process environment
+        if (clientToken !== bearerToken) {
+            console.warn('⚠️ Rejected connection due to missing or invalid bearer token');
+            ws.close(4003, 'Unauthorized');
+            return;
+        }
+    } else if (origin) {
+        // Fallback to origin validation to protect development environments
+        const originUrl = url.parse(origin);
+        const allowedHosts = ['news.ycombinator.com', 'iptorrents.com', 'iptorrents.ru', 'localhost', '127.0.0.1'];
+        const host = originUrl.hostname;
+        let isAllowed = allowedHosts.some(h => host === h || host.endsWith('.' + h)) || origin.startsWith('chrome-extension://') || origin.startsWith('moz-extension://');
+        
+        if (!isAllowed) {
+            let targetFile = fileToWatch;
+            if (isDirectoryMode) {
+                if (clientFilename) {
+                    targetFile = path.join(fileToWatch, clientFilename);
+                } else {
+                    const files = fs.readdirSync(fileToWatch).filter(f => f.endsWith('.user.js'));
+                    if (files.length > 0) {
+                        targetFile = path.join(fileToWatch, files[0]);
+                    }
+                }
+            }
+            if (fs.existsSync(targetFile)) {
+                try {
+                    const rawCode = fs.readFileSync(targetFile, 'utf-8');
+                    const info = getScriptInfo(rawCode);
+                    if (info) {
+                        const patterns = [...(info.matches || []), ...(info.includes || [])];
+                        for (const pattern of patterns) {
+                            if (pattern === '*://*/*' || pattern === '*://*' || pattern === '*' || pattern.includes('://*')) {
+                                isAllowed = true;
+                                break;
+                            }
+                            const regex = matchPatternToRegex(pattern);
+                            if (regex && regex.test(origin)) {
+                                isAllowed = true;
+                                break;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error reading matches for origin validation:', e);
+                }
+            }
+        }
+
+        if (!isAllowed) {
+            console.warn(`⚠️ Rejected connection from unauthorized origin: ${origin}`);
+            ws.close(4001, 'Forbidden Origin');
+            return;
+        }
+    }
 
     clients.add(ws);
     const ip = req.socket.remoteAddress;
