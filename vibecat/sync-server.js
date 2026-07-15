@@ -83,8 +83,8 @@ function getSha256(content) {
     return crypto.createHash('sha256').update(content).digest('hex');
 }
 
-function getFinalCode() {
-    const code = fs.existsSync(fileToWatch) ? fs.readFileSync(fileToWatch, 'utf-8') : '';
+function getFinalCode(rawCode) {
+    const code = rawCode || (fs.existsSync(fileToWatch) ? fs.readFileSync(fileToWatch, 'utf-8') : '');
     const info = getScriptInfo(code) || {};
     
     let finalCode = code;
@@ -104,6 +104,11 @@ function getFinalCode() {
                     `const SYNC_BEARER_TOKEN = '${bearerToken}';`
                 );
             }
+            const sha256 = getSha256(code);
+            clientCode = clientCode.replace(
+                /let scriptHash = 'unknown';/,
+                `let scriptHash = '${sha256}';`
+            );
             finalCode = code + '\n\n// --- VibeCat Auto-Injected Sync Client ---\n' + clientCode;
         }
     }
@@ -171,8 +176,9 @@ wss.on('connection', (ws, req) => {
     console.log(`🔌 Client browser connected from IP: ${ip}`);
 
     // Send handshake immediately
-    const { code: finalCode, info } = getFinalCode();
-    const sha256 = getSha256(finalCode);
+    const rawCode = fs.existsSync(fileToWatch) ? fs.readFileSync(fileToWatch, 'utf-8') : '';
+    const { code: finalCode, info } = getFinalCode(rawCode);
+    const sha256 = getSha256(rawCode);
 
     ws.send(JSON.stringify({
         action: 'hello',
@@ -244,8 +250,8 @@ function pushCode(client) {
             return;
         }
 
-        const { code: finalCode, info } = getFinalCode();
-        const sha256 = getSha256(finalCode);
+        const { code: finalCode, info } = getFinalCode(rawCode);
+        const sha256 = getSha256(rawCode);
         const fileUri = url.pathToFileURL(fileToWatch).href;
 
         // VS Code / ScriptCat sync payload format

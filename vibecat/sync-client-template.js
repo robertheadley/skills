@@ -95,8 +95,16 @@
             }
 
             if (message.action === 'onchange' || message.action === 'push') {
-                scriptVersion = message.data.version || scriptVersion;
-                scriptHash = message.data.hash || scriptHash;
+                const newVersion = message.data.version || scriptVersion;
+                const newHash = message.data.hash || scriptHash;
+
+                if (newHash && scriptHash !== 'unknown' && scriptHash === newHash) {
+                    // Hash matches the current running code. Ignore this push to avoid a reboot loop.
+                    return;
+                }
+
+                scriptVersion = newVersion;
+                scriptHash = newHash;
 
                 if (!receivedInitialHandshake) {
                     receivedInitialHandshake = true;
