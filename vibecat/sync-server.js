@@ -14,7 +14,7 @@ try {
     process.exit(1);
 }
 
-const PORT = 8642;
+let PORT = 8642;
 const HOST = '127.0.0.1'; // Strictly local loopback
 
 // Parse CLI Arguments
@@ -47,10 +47,11 @@ if (!fileToWatch) {
 }
 
 if (!fs.existsSync(fileToWatch)) {
-    console.error(`\x1b[31mError: File not found: ${fileToWatch}\x1b[0m`);
+    console.error(`\x1b[31mError: File or directory not found: ${fileToWatch}\x1b[0m`);
     process.exit(1);
 }
 
+const isDirectoryMode = fs.statSync(fileToWatch).isDirectory();
 const projectDir = __dirname;
 const runtimeDir = path.join(projectDir, '.runtime');
 const consoleLogPath = path.join(runtimeDir, 'userscript-console.jsonl');
@@ -83,8 +84,8 @@ function getSha256(content) {
     return crypto.createHash('sha256').update(content).digest('hex');
 }
 
-function getFinalCode(rawCode) {
-    const code = rawCode || (fs.existsSync(fileToWatch) ? fs.readFileSync(fileToWatch, 'utf-8') : '');
+function getFinalCodeForFile(rawCode, filePath) {
+    const code = rawCode;
     const info = getScriptInfo(code) || {};
     
     let finalCode = code;
@@ -96,7 +97,7 @@ function getFinalCode(rawCode) {
             let clientCode = fs.readFileSync(clientTemplatePath, 'utf-8');
             clientCode = clientCode.replace(
                 /const SYNC_SERVER_WS = 'ws:\/\/127\.0\.0\.1:8642';/,
-                `const SYNC_SERVER_WS = 'ws://${HOST}:${PORT}';`
+                `const SYNC_SERVER_WS = 'ws://${HOST}:${activePort}';`
             );
             if (bearerToken) {
                 clientCode = clientCode.replace(
@@ -104,6 +105,11 @@ function getFinalCode(rawCode) {
                     `const SYNC_BEARER_TOKEN = '${bearerToken}';`
                 );
             }
+            const filename = path.basename(filePath);
+            clientCode = clientCode.replace(
+                /const SYNC_FILENAME = 'unknown';/,
+                `const SYNC_FILENAME = '${filename}';`
+            );
             const sha256 = getSha256(code);
             clientCode = clientCode.replace(
                 /let scriptHash = 'unknown';/,
@@ -133,6 +139,7 @@ const server = http.createServer((req, res) => {
         res.end(JSON.stringify({
             status: 'ok',
             watched_file: fileToWatch,
+            isDirectoryMode: isDirectoryMode,
             websocket_clients: clients.size,
             console_diagnostics: {
                 enabled: !noConsole,
@@ -149,9 +156,6 @@ const server = http.createServer((req, res) => {
 
 // Create WebSocket Server sharing the HTTP port
 const wss = new WebSocket.WebSocketServer({ server });
-
-console.log(`\x1b[32m🚀 Userscript Development Sync Server started on http://${HOST}:${PORT}\x1b[0m`);
-console.log(`👀 Watching file: ${fileToWatch}`);
 
 wss.on('connection', (ws, req) => {
     // 1. Authenticate connection
@@ -179,26 +183,45 @@ wss.on('connection', (ws, req) => {
         }
     }
 
+    const clientPathname = parsedUrl.pathname.replace(/^\//, '');
+    let clientFilename = null;
+    if (clientPathname.endsWith('.user.js')) {
+        clientFilename = clientPathname;
+    }
+    ws.requestedFilename = clientFilename;
+
     clients.add(ws);
     const ip = req.socket.remoteAddress;
-    console.log(`🔌 Client browser connected from IP: ${ip}`);
+    console.log(`🔌 Client browser connected from IP: ${ip} (Requested: ${clientFilename || 'all scripts'})`);
 
-    // Send handshake immediately
-    const rawCode = fs.existsSync(fileToWatch) ? fs.readFileSync(fileToWatch, 'utf-8') : '';
-    const { code: finalCode, info } = getFinalCode(rawCode);
-    const sha256 = getSha256(rawCode);
+    // Determine target userscript file
+    let targetFile = fileToWatch;
+    if (isDirectoryMode) {
+        if (clientFilename) {
+            targetFile = path.join(fileToWatch, clientFilename);
+        } else {
+            // Default to first userscript in directory
+            const files = fs.readdirSync(fileToWatch).filter(f => f.endsWith('.user.js'));
+            if (files.length > 0) {
+                targetFile = path.join(fileToWatch, files[0]);
+            }
+        }
+    }
 
-    ws.send(JSON.stringify({
-        action: 'hello',
-        version: info.version || '0.1',
-        hash: sha256
-    }));
+    if (fs.existsSync(targetFile)) {
+        const rawCode = fs.readFileSync(targetFile, 'utf-8');
+        const { info } = getFinalCodeForFile(rawCode, targetFile);
+        const sha256 = getSha256(rawCode);
 
-    // Trigger handshake confirmed log as required by skill verification
-    console.log('ScriptCat handshake confirmed');
+        ws.send(JSON.stringify({
+            action: 'hello',
+            version: info.version || '0.1',
+            hash: sha256
+        }));
 
-    // Send the current code immediately on connection
-    pushCode(ws);
+        console.log('ScriptCat handshake confirmed');
+        pushCode(ws, targetFile);
+    }
 
     ws.on('close', () => {
         clients.delete(ws);
@@ -232,10 +255,33 @@ wss.on('connection', (ws, req) => {
                 };
 
                 fs.appendFileSync(consoleLogPath, JSON.stringify(logRecord) + '\n');
+
+                // Live Terminal Console Relay
+                const level = logRecord.level;
+                const msgText = logRecord.message;
+                const timeStr = new Date().toLocaleTimeString();
+                let color = '\x1b[0m'; // Default reset
+                if (level === 'error') color = '\x1b[31m'; // Red
+                else if (level === 'warn') color = '\x1b[33m'; // Yellow
+                else if (level === 'info') color = '\x1b[36m'; // Cyan
+                else if (level === 'log') color = '\x1b[32m'; // Green
+                else if (level === 'unhandledrejection') color = '\x1b[35m'; // Magenta
+
+                console.log(`[Browser Console ${timeStr}] [${level.toUpperCase()}] ${color}${msgText}\x1b[0m`);
+
+            } else if (data.action === 'eval_result') {
+                const status = data.data.status;
+                const result = data.data.result;
+                const color = status === 'success' ? '\x1b[32m' : '\x1b[31m';
+                const prefix = status === 'success' ? '✔ Result:' : '❌ Error:';
+                console.log(`[REPL Result] ${color}${prefix} ${result}\x1b[0m`);
+
             } else if (data.action === 'dom_report') {
                 // Safely accept and write DOM snapshot report
-                const basename = path.basename(fileToWatch, '.user.js');
-                const reportPath = path.join(path.dirname(fileToWatch), `${basename}_dom_report.json`);
+                const filename = ws.requestedFilename || (isDirectoryMode ? 'userscript' : path.basename(fileToWatch, '.user.js'));
+                const basename = filename.endsWith('.user.js') ? path.basename(filename, '.user.js') : filename;
+                const outputDir = isDirectoryMode ? fileToWatch : path.dirname(fileToWatch);
+                const reportPath = path.join(outputDir, `${basename}_dom_report.json`);
                 fs.writeFileSync(reportPath, JSON.stringify(data.data, null, 2));
                 console.log(`💾 Saved DOM Report to: ${reportPath}`);
             }
@@ -245,82 +291,153 @@ wss.on('connection', (ws, req) => {
     });
 });
 
-function pushCode(client) {
+function pushCode(client, targetFile) {
     try {
-        if (!fs.existsSync(fileToWatch)) {
-            console.warn(`⚠️ Warning: file not found: ${fileToWatch}`);
-            return;
-        }
-
-        const rawCode = fs.readFileSync(fileToWatch, 'utf-8');
-        if (!getScriptInfo(rawCode)) {
-            console.warn('⚠️ Warning: Could not parse UserScript metadata block');
-            return;
-        }
-
-        const { code: finalCode, info } = getFinalCode(rawCode);
-        const sha256 = getSha256(rawCode);
-        const fileUri = url.pathToFileURL(fileToWatch).href;
-
-        // VS Code / ScriptCat sync payload format
-        const payloadOnChange = JSON.stringify({
-            action: 'onchange',
-            data: {
-                script: finalCode,
-                uri: fileUri,
-                version: info.version || '0.1',
-                hash: sha256
-            }
-        });
-
-        const payloadPush = JSON.stringify({
-            action: 'push',
-            data: {
-                code: finalCode,
-                filename: path.basename(fileToWatch),
-                name: info.name || 'Synced Userscript',
-                namespace: info.namespace || 'userscript-sync',
-                uuid: info.uuid || 'userscript-sync-uuid',
-                version: info.version || '0.1',
-                hash: sha256
-            }
-        });
-
-        const sendToClient = (c) => {
-            if (c.readyState === WebSocket.OPEN) {
-                c.send(payloadOnChange);
-                c.send(payloadPush);
-            }
-        };
-
-        if (client) {
-            sendToClient(client);
+        let filesToPush = [];
+        if (targetFile) {
+            filesToPush = [targetFile];
+        } else if (isDirectoryMode) {
+            filesToPush = fs.readdirSync(fileToWatch)
+                .filter(f => f.endsWith('.user.js'))
+                .map(f => path.join(fileToWatch, f));
         } else {
-            clients.forEach(c => sendToClient(c));
+            filesToPush = [fileToWatch];
         }
 
-        // Print exactly the format expected by the sync skill's stdout verification step
-        const filename = path.basename(fileToWatch);
-        const activeClients = clients.size;
-        console.log(`Synced ${filename} (${activeClients} client(s), sha256:${sha256})`);
+        for (const filePath of filesToPush) {
+            if (!fs.existsSync(filePath)) continue;
+
+            const rawCode = fs.readFileSync(filePath, 'utf-8');
+            const info = getScriptInfo(rawCode);
+            if (!info) continue;
+
+            const { code: finalCode } = getFinalCodeForFile(rawCode, filePath);
+            const sha256 = getSha256(rawCode);
+            const fileUri = url.pathToFileURL(filePath).href;
+            const filename = path.basename(filePath);
+
+            const payloadOnChange = JSON.stringify({
+                action: 'onchange',
+                data: {
+                    script: finalCode,
+                    uri: fileUri,
+                    filename: filename,
+                    version: info.version || '0.1',
+                    hash: sha256
+                }
+            });
+
+            const payloadPush = JSON.stringify({
+                action: 'push',
+                data: {
+                    code: finalCode,
+                    filename: filename,
+                    name: info.name || 'Synced Userscript',
+                    namespace: info.namespace || 'userscript-sync',
+                    uuid: info.uuid || 'userscript-sync-uuid',
+                    version: info.version || '0.1',
+                    hash: sha256
+                }
+            });
+
+            const sendToClient = (c) => {
+                if (c.readyState === WebSocket.OPEN) {
+                    if (!c.requestedFilename || c.requestedFilename === filename) {
+                        c.send(payloadOnChange);
+                        c.send(payloadPush);
+                    }
+                }
+            };
+
+            if (client) {
+                sendToClient(client);
+            } else {
+                clients.forEach(c => sendToClient(c));
+            }
+
+            console.log(`Synced ${filename} (${client ? '1' : clients.size} client(s), sha256:${sha256})`);
+        }
     } catch (err) {
         console.error('❌ Error reading/pushing script:', err);
     }
 }
 
-// Watch userscript file for changes
+// Watch userscript file/directory for changes
 let watchTimeout = null;
-fs.watch(fileToWatch, (eventType) => {
-    if (eventType === 'change') {
-        clearTimeout(watchTimeout);
-        watchTimeout = setTimeout(() => {
-            console.log('📝 Local userscript modified! Syncing...');
-            pushCode();
-        }, 100);
+if (isDirectoryMode) {
+    fs.watch(fileToWatch, { recursive: true }, (eventType, filename) => {
+        if (filename && filename.endsWith('.user.js')) {
+            clearTimeout(watchTimeout);
+            watchTimeout = setTimeout(() => {
+                const fullPath = path.join(fileToWatch, filename);
+                console.log(`📝 Local userscript modified: ${filename}! Syncing...`);
+                pushCode(null, fullPath);
+            }, 100);
+        }
+    });
+} else {
+    fs.watch(fileToWatch, (eventType) => {
+        if (eventType === 'change') {
+            clearTimeout(watchTimeout);
+            watchTimeout = setTimeout(() => {
+                console.log('📝 Local userscript modified! Syncing...');
+                pushCode();
+            }, 100);
+        }
+    });
+}
+
+// Interactive Live-Command Console (REPL) Standard Input Stream Reader
+process.stdin.setEncoding('utf-8');
+process.stdin.on('data', (data) => {
+    const code = data.trim();
+    if (!code) return;
+
+    console.log(`\x1b[34m[REPL] Sending JavaScript to clients: ${code}\x1b[0m`);
+    
+    let clientCount = 0;
+    for (const ws of clients) {
+        if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                action: 'eval',
+                data: { code: code }
+            }));
+            clientCount++;
+        }
+    }
+    if (clientCount === 0) {
+        console.log(`\x1b[33m⚠️ No active clients connected to execute command.\x1b[0m`);
     }
 });
 
-// Start HTTP + WebSocket Server on loopback address only
-server.listen(PORT, HOST, () => {
-    console.log(`✅ Server is active and listening on http://${HOST}:${PORT}`);
+let activePort = PORT;
+
+function startServer(port) {
+    server.listen(port, HOST, () => {
+        console.log(`\x1b[32m🚀 Userscript Development Sync Server started on http://${HOST}:${port}\x1b[0m`);
+        console.log(`👀 Watching path: ${fileToWatch} (Mode: ${isDirectoryMode ? 'Directory' : 'File'})`);
+        console.log(`💬 Type JavaScript into this terminal to execute it on active browser pages (REPL mode).\n`);
+
+        // Write active port configuration to .runtime/active-port.json
+        const runtimeDir = path.join(projectDir, '.runtime');
+        if (!fs.existsSync(runtimeDir)) {
+            fs.mkdirSync(runtimeDir, { recursive: true });
+        }
+        fs.writeFileSync(
+            path.join(runtimeDir, 'active-port.json'),
+            JSON.stringify({ port: port, host: HOST, pid: process.pid })
+        );
+    });
+}
+
+server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+        console.log(`⚠️ Port ${activePort} is in use, trying next port...`);
+        activePort++;
+        startServer(activePort);
+    } else {
+        console.error('❌ Server error:', err);
+    }
 });
+
+startServer(activePort);

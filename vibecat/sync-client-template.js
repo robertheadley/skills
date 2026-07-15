@@ -11,6 +11,7 @@
 
     const SYNC_SERVER_WS = 'ws://127.0.0.1:8642';
     const SYNC_BEARER_TOKEN = ''; // Set token value here if server has process.env.SYNC_BEARER_TOKEN set
+    const SYNC_FILENAME = 'unknown'; // Injected by server for multi-script routing
     const SHOW_CONFIRMATION_BANNER = true;
     const AUTO_RELOAD_ON_CHANGE = true;
     const ENABLE_CONSOLE_LOGGING = true; // Forwards userscript console events back to server logs
@@ -94,7 +95,34 @@
                 return;
             }
 
+            if (message.action === 'eval') {
+                try {
+                    const result = window.eval(message.data.code);
+                    socket.send(JSON.stringify({
+                        action: 'eval_result',
+                        data: {
+                            result: String(result),
+                            status: 'success'
+                        }
+                    }));
+                } catch (e) {
+                    socket.send(JSON.stringify({
+                        action: 'eval_result',
+                        data: {
+                            result: e.message + '\n' + e.stack,
+                            status: 'error'
+                        }
+                    }));
+                }
+                return;
+            }
+
             if (message.action === 'onchange' || message.action === 'push') {
+                if (SYNC_FILENAME !== 'unknown' && message.data.filename && message.data.filename !== SYNC_FILENAME) {
+                    // Ignore other userscripts' reload events in multi-script workspace
+                    return;
+                }
+
                 const newVersion = message.data.version || scriptVersion;
                 const newHash = message.data.hash || scriptHash;
 
