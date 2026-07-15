@@ -29,6 +29,10 @@
     // Show visual confirmation banner when sync is successfully established
     function showSyncBanner(version) {
         if (!SHOW_CONFIRMATION_BANNER) return;
+        
+        const justUpdated = sessionStorage.getItem('__vibecat_just_updated') === 'true';
+        sessionStorage.removeItem('__vibecat_just_updated');
+
         // Inject slide-down stylesheet
         const style = document.createElement('style');
         style.textContent = `
@@ -44,6 +48,13 @@
         (document.head || document.documentElement).appendChild(style);
 
         const banner = document.createElement('div');
+        
+        const borderColor = justUpdated ? 'rgba(16, 185, 129, 0.6)' : 'rgba(59, 130, 246, 0.5)';
+        const dotColor = justUpdated ? '#10b981' : '#3b82f6';
+        const msgText = justUpdated 
+            ? `Sync Updated! <span style="color: #94a3b8; font-weight: normal;">Hot-reloaded to version ${version || 'development'}.</span>`
+            : `Sync Connected! <span style="color: #94a3b8; font-weight: normal;">Running version ${version || 'development'}.</span>`;
+
         banner.style.cssText = `
             position: fixed;
             top: 20px;
@@ -51,7 +62,7 @@
             transform: translateX(-50%);
             background: rgba(30, 41, 59, 0.95);
             backdrop-filter: blur(8px);
-            border: 1px solid rgba(59, 130, 246, 0.5);
+            border: 1px solid ${borderColor};
             color: #f8fafc;
             padding: 10px 24px;
             border-radius: 9999px;
@@ -67,8 +78,8 @@
         `;
 
         banner.innerHTML = `
-            <span style="color: #3b82f6; display: flex; align-items: center; animation: pulse 2s infinite;">●</span>
-            <span>Sync Connected! <span style="color: #94a3b8; font-weight: normal;">Running hot-reload version ${version || 'development'}.</span></span>
+            <span style="color: ${dotColor}; display: flex; align-items: center; animation: pulse 2s infinite;">●</span>
+            <span>${msgText}</span>
         `;
         document.body.appendChild(banner);
 
@@ -505,6 +516,7 @@
 
                 if (AUTO_RELOAD_ON_CHANGE) {
                     console.log('[Sync Client] Code changed detected! Reloading page...');
+                    sessionStorage.setItem('__vibecat_just_updated', 'true');
                     setTimeout(() => window.location.reload(), 200);
                 }
             }
