@@ -184,26 +184,6 @@ wss.on('connection', (ws, req) => {
     const clientToken = parsedUrl.query.token || parsedUrl.query.key || req.headers['sec-websocket-protocol'];
     const origin = req.headers.origin;
 
-    if (bearerToken) {
-        // Enforce strict token matching if bearertoken is set in process environment
-        if (clientToken !== bearerToken) {
-            console.warn('⚠️ Rejected connection due to missing or invalid bearer token');
-            ws.close(4003, 'Unauthorized');
-            return;
-        }
-    } else if (origin) {
-        // Fallback to origin validation to protect development environments
-        const originUrl = url.parse(origin);
-        const allowedHosts = ['news.ycombinator.com', 'iptorrents.com', 'iptorrents.ru', 'localhost', '127.0.0.1'];
-        const host = originUrl.hostname;
-        const isAllowed = allowedHosts.some(h => host === h || host.endsWith('.' + h)) || origin.startsWith('chrome-extension://') || origin.startsWith('moz-extension://');
-        if (!isAllowed) {
-            console.warn(`⚠️ Rejected connection from unauthorized origin: ${origin}`);
-            ws.close(4001, 'Forbidden Origin');
-            return;
-        }
-    }
-
     const clientPathname = parsedUrl.pathname.replace(/^\//, '');
     let clientFilename = null;
     if (clientPathname.endsWith('.user.js')) {
@@ -237,18 +217,22 @@ wss.on('connection', (ws, req) => {
                     }
                 }
             }
+            console.log(`[Origin Debug] Checking file: ${targetFile}`);
             if (fs.existsSync(targetFile)) {
                 try {
                     const rawCode = fs.readFileSync(targetFile, 'utf-8');
                     const info = getScriptInfo(rawCode);
+                    console.log(`[Origin Debug] Script info parsed matches:`, info ? info.matches : null);
                     if (info) {
                         const patterns = [...(info.matches || []), ...(info.includes || [])];
                         for (const pattern of patterns) {
                             if (pattern === '*://*/*' || pattern === '*://*' || pattern === '*' || pattern.includes('://*')) {
                                 isAllowed = true;
+                                console.log(`[Origin Debug] Wildcard pattern match allowed connection`);
                                 break;
                             }
                             const regex = matchPatternToRegex(pattern);
+                            console.log(`[Origin Debug] Pattern: ${pattern} => Regex: ${regex} => Test result: ${regex ? regex.test(origin) : false}`);
                             if (regex && regex.test(origin)) {
                                 isAllowed = true;
                                 break;
@@ -258,6 +242,8 @@ wss.on('connection', (ws, req) => {
                 } catch (e) {
                     console.error('Error reading matches for origin validation:', e);
                 }
+            } else {
+                console.log(`[Origin Debug] File does not exist: ${targetFile}`);
             }
         }
 
