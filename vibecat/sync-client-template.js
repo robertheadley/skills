@@ -28,9 +28,9 @@
     // Show visual confirmation banner when sync is successfully established
     function showSyncBanner(version) {
         if (!SHOW_CONFIRMATION_BANNER) return;
-        
         // Inject slide-down stylesheet
-        GM_addStyle(`
+        const style = document.createElement('style');
+        style.textContent = `
             @keyframes sync-slide-down {
                 0% { transform: translate(-50%, -100%); opacity: 0; }
                 100% { transform: translate(-50%, 0); opacity: 1; }
@@ -39,7 +39,8 @@
                 0% { transform: translate(-50%, 0); opacity: 1; }
                 100% { transform: translate(-50%, -100%); opacity: 0; }
             }
-        `);
+        `;
+        (document.head || document.documentElement).appendChild(style);
 
         const banner = document.createElement('div');
         banner.style.cssText = `

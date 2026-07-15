@@ -20,6 +20,7 @@ const HOST = '127.0.0.1'; // Strictly local loopback
 // Parse CLI Arguments
 const args = process.argv.slice(2);
 const noConsole = args.includes('--no-console');
+const noInject = args.includes('--no-inject');
 let fileToWatch = args.find(arg => !arg.startsWith('-'));
 
 if (!fileToWatch) {
@@ -38,7 +39,7 @@ if (!fileToWatch) {
     } else {
         console.error(`\x1b[31mError: No userscript specified and none found in the current directory.\x1b[0m`);
         console.log('Usage:');
-        console.log('  node sync-server.js [--no-console] <path-to-script.user.js>');
+        console.log('  node sync-server.js [--no-console] [--no-inject] <path-to-script.user.js>');
         process.exit(1);
     }
 } else {
@@ -80,6 +81,33 @@ function getScriptInfo(code) {
 
 function getSha256(content) {
     return crypto.createHash('sha256').update(content).digest('hex');
+}
+
+function getFinalCode() {
+    const code = fs.existsSync(fileToWatch) ? fs.readFileSync(fileToWatch, 'utf-8') : '';
+    const info = getScriptInfo(code) || {};
+    
+    let finalCode = code;
+    const clientTemplatePath = path.join(projectDir, 'sync-client-template.js');
+
+    if (!noInject && fs.existsSync(clientTemplatePath)) {
+        const alreadyInjected = code.includes('[Sync Client]');
+        if (!alreadyInjected) {
+            let clientCode = fs.readFileSync(clientTemplatePath, 'utf-8');
+            clientCode = clientCode.replace(
+                /const SYNC_SERVER_WS = 'ws:\/\/127\.0\.0\.1:8642';/,
+                `const SYNC_SERVER_WS = 'ws://${HOST}:${PORT}';`
+            );
+            if (bearerToken) {
+                clientCode = clientCode.replace(
+                    /const SYNC_BEARER_TOKEN = '';/,
+                    `const SYNC_BEARER_TOKEN = '${bearerToken}';`
+                );
+            }
+            finalCode = code + '\n\n// --- VibeCat Auto-Injected Sync Client ---\n' + clientCode;
+        }
+    }
+    return { code: finalCode, info };
 }
 
 const clients = new Set();
@@ -143,9 +171,8 @@ wss.on('connection', (ws, req) => {
     console.log(`🔌 Client browser connected from IP: ${ip}`);
 
     // Send handshake immediately
-    const code = fs.existsSync(fileToWatch) ? fs.readFileSync(fileToWatch, 'utf-8') : '';
-    const info = getScriptInfo(code) || {};
-    const sha256 = getSha256(code);
+    const { code: finalCode, info } = getFinalCode();
+    const sha256 = getSha256(finalCode);
 
     ws.send(JSON.stringify({
         action: 'hello',
@@ -211,22 +238,21 @@ function pushCode(client) {
             return;
         }
 
-        const code = fs.readFileSync(fileToWatch, 'utf-8');
-        const info = getScriptInfo(code);
-
-        if (!info) {
+        const rawCode = fs.readFileSync(fileToWatch, 'utf-8');
+        if (!getScriptInfo(rawCode)) {
             console.warn('⚠️ Warning: Could not parse UserScript metadata block');
             return;
         }
 
-        const sha256 = getSha256(code);
+        const { code: finalCode, info } = getFinalCode();
+        const sha256 = getSha256(finalCode);
         const fileUri = url.pathToFileURL(fileToWatch).href;
 
         // VS Code / ScriptCat sync payload format
         const payloadOnChange = JSON.stringify({
             action: 'onchange',
             data: {
-                script: code,
+                script: finalCode,
                 uri: fileUri,
                 version: info.version || '0.1',
                 hash: sha256
@@ -236,7 +262,7 @@ function pushCode(client) {
         const payloadPush = JSON.stringify({
             action: 'push',
             data: {
-                code: code,
+                code: finalCode,
                 filename: path.basename(fileToWatch),
                 name: info.name || 'Synced Userscript',
                 namespace: info.namespace || 'userscript-sync',
