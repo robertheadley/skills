@@ -175,3 +175,14 @@ node scripts/benchmark.js
 ```
 
 Results are printed to stdout and saved as machine-parsable JSON to `.runtime/benchmark-results.json`.
+
+---
+
+## 🤖 Token & Context Window Optimizations (for AI Agents)
+
+VibeCat is designed with specific optimizations to prevent terminal stdout output from flooding and exhausting the context window of autonomous coding agents during development loops:
+
+1. **Intelligent Console Filtering**: VibeCat intercepts all browser console events but only prints critical errors (uncaught exceptions, rejection failures) and developer-tagged console logs (prefixed with `[` or containing `[Sync Client]`) to stdout. The remaining noisy logs (network requests, third-party warnings) are silently written to `.runtime/userscript-console.jsonl`.
+2. **Disk-Bound HTML Snapshots**: Captures of full page HTML structure via `dom_report` are saved directly to local files (`*_dom_report.json`) on disk rather than dumped to stdout.
+3. **Compact Element Picker Responses**: The interactive element picker only returns high-value metadata (CSS selector path, tag name, user message, and a truncated 100-character text snippet) to stdout, keeping token usage under 15 tokens per pick.
+4. **Zero-Overhead Local Source Files**: The hot-reload client is injected dynamically in-memory when serving WebSocket or HTTP payloads. The source files on disk remain clean, keeping the agent's file read operations and Git diffs brief and free of boilerplate.
