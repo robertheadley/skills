@@ -1,0 +1,4 @@
+interface:
+  display_name: "Sync ScriptCat Userscripts"
+  short_description: "Sync and debug ScriptCat userscripts locally"
+  default_prompt: "Use $sync-scriptcat-userscripts to start the local sync server, update my userscript, and monitor its live console."

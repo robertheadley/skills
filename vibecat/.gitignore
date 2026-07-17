@@ -1,3 +1,5 @@
 node_modules/
 .runtime/
-*.log
+mock-script.user.js
+*_dom_report.json
+.history/

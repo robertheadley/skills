@@ -1,14 +1,30 @@
 {
   "name": "vibecat",
-  "version": "1.2.0",
-  "description": "VibeCat is a standalone ScriptCat userscript live-sync and hot-reload server.",
+  "version": "2.0.0",
+  "description": "Deterministic browser-aware userscript development for coding agents.",
   "main": "sync-server.js",
+  "bin": {
+    "vibecat": "bin/vibecat.js"
+  },
   "scripts": {
-    "start": "node sync-server.js"
+    "start": "node sync-server.js",
+    "vibecat": "node bin/vibecat.js",
+    "benchmark": "node scripts/benchmark-build.js",
+    "test": "node --test tests/*.test.js",
+    "typecheck": "tsc --project tsconfig.check.json",
+    "lint": "node --check bin/vibecat.js && node --check sync-server.js && node --check src/browser-bridge.js && node --check src/services.js",
+    "check": "npm run lint && npm run typecheck && node --test tests/*.test.js"
   },
   "dependencies": {
-    "ws": "^8.16.0"
+    "esbuild": "^0.25.12",
+    "typescript": "^5.9.3",
+    "ws": "^8.18.3"
   },
   "author": "Antigravity",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "@types/ws": "^8.18.1",
+    "jsdom": "^26.1.0"
+  }
 }
