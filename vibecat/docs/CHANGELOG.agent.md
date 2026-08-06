@@ -2,6 +2,25 @@
 
 All modifications made to the sync utility codebase by the AI agent.
 
+## [2.0.1] - 2026-08-06
+
+```yaml
+id: vibecat-2.0.1-divergence-aware-install-detection
+timestamp: 2026-08-06T19:20:00+00:00
+what: Fixed the duplicate-installation false positive. `vibecat locate` and the `duplicate-installations` doctor check now warn only when detected copies genuinely diverge (different versions or incomplete copies) instead of warning for every multi-copy layout. The documented skill-plus-CLI installation pattern (agent skill directory plus a global CLI copy of the same version) no longer emits a permanent warning. Added a `divergent` field to locate/doctor output and unit tests for the new selection semantics.
+why: The documented distribution model installs the skill into an agent skills directory (Hermes, Codex, Antigravity) while the CLI also lives in the user home; the previous `candidates.length > 1` heuristic warned on every command in exactly that supported layout, and the remediation asked users to delete a copy that the install instructions tell them to keep. Same-version copies are interchangeable, so only divergent copies carry stale-CLI risk.
+components:
+  - src/services.js (selectInstallation divergence computation, doctor check)
+  - bin/vibecat.js (locate warning condition and message)
+  - tests/locate.test.js (selection and divergence unit tests)
+  - package.json / package-lock.json (2.0.1)
+type: patch
+validation:
+  - npm run lint
+  - npm test
+  - npm run check
+```
+
 ## [2.0.0] - 2026-07-17
 
 ```yaml

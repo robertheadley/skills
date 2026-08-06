@@ -158,7 +158,7 @@ async function execute(positionals, options) {
   if (command === 'version') return result('version', { state: 'INSTALLED', version: pkg.version, nextActions: [] });
   if (command === 'locate') {
     const located = locateInstallation();
-    return result('locate', { state: located.selected ? 'INSTALLED' : 'UNAVAILABLE', ...located, warnings: located.candidates.length > 1 ? [{ code: 'DUPLICATE_INSTALLATION', message: `${located.candidates.length} VibeCat installations were detected.` }] : [], nextActions: located.selected ? [] : ['Run `vibecat install --from <path> --json`.'] });
+    return result('locate', { state: located.selected ? 'INSTALLED' : 'UNAVAILABLE', ...located, warnings: located.divergent ? [{ code: 'DUPLICATE_INSTALLATION', message: `${located.candidates.length} divergent VibeCat installations were detected (different versions or incomplete copies).` }] : [], nextActions: located.selected ? [] : ['Run `vibecat install --from <path> --json`.'] });
   }
   if (['install', 'update'].includes(command)) {
     const action = copyInstallation(options.from || APP_ROOT, options.target || path.join(os.homedir(), '.vibecat'), options.force || command === 'update', !options['no-launcher']);

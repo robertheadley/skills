@@ -1,6 +1,6 @@
 {
   "name": "vibecat",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Deterministic browser-aware userscript development for coding agents.",
   "main": "sync-server.js",
   "bin": {
@@ -26,5 +26,8 @@
     "@types/node": "^24.13.3",
     "@types/ws": "^8.18.1",
     "jsdom": "^26.1.0"
+  },
+  "allowScripts": {
+    "esbuild@0.25.12": true
   }
 }

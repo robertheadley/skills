@@ -24,6 +24,14 @@ function candidate(pathValue, source) {
   try { const value = JSON.parse(fs.readFileSync(path.join(resolved, 'package.json'), 'utf8')); return { path: resolved, source, version: value.version || null, complete: fs.existsSync(path.join(resolved, 'bin', 'vibecat.js')) && fs.existsSync(path.join(resolved, 'src', 'services.js')) }; } catch { return { path: resolved, source, version: null, complete: false }; }
 }
 
+function selectInstallation(homes) {
+  const unique = Array.from(new Map(homes.filter(Boolean).map((item) => [item.path.toLowerCase(), item])).values());
+  const selected = unique.find((item) => item.path === APP_ROOT) || unique.find((item) => item.complete) || null;
+  const completeVersions = new Set(unique.filter((item) => item.complete).map((item) => item.version).filter(Boolean));
+  const divergent = unique.length > 1 && (completeVersions.size > 1 || unique.some((item) => !item.complete));
+  return { selected: selected ? { ...selected, active: true } : null, candidates: unique.map((item) => ({ ...item, active: selected && item.path === selected.path })), divergent };
+}
+
 function locateInstallation() {
   const homes = [
     candidate(APP_ROOT, 'repository'), candidate(process.env.VIBECAT_HOME, 'environment'),
@@ -31,10 +39,8 @@ function locateInstallation() {
     candidate(path.join(os.homedir(), '.hermes', 'skills', 'vibecat'), 'hermes-skills'),
     candidate(path.join(os.homedir(), '.codex', 'skills', 'vibecat'), 'codex-skills'),
     candidate(path.join(os.homedir(), '.gemini', 'antigravity', 'skills', 'vibecat'), 'antigravity-skills'),
-  ].filter(Boolean);
-  const unique = Array.from(new Map(homes.map((item) => [item.path.toLowerCase(), item])).values());
-  const selected = unique.find((item) => item.path === APP_ROOT) || unique.find((item) => item.complete) || null;
-  return { selected: selected ? { ...selected, active: true } : null, candidates: unique.map((item) => ({ ...item, active: selected && item.path === selected.path })) };
+  ];
+  return selectInstallation(homes);
 }
 
 function processExists(pid) { try { process.kill(pid, 0); return true; } catch { return false; } }
@@ -183,7 +189,7 @@ async function runDoctor(project) {
   add('platform', 'PASS', { platform: process.platform, shell: detectEnvironment() }, 'Path conversion is environment-sensitive.', 'No action required.', false);
   add('native-path-conversion', normalizePath(project.projectPath) === project.projectPath ? 'PASS' : 'WARN', { input: project.projectPath, normalized: normalizePath(project.projectPath) }, 'All tools must agree on the native project path.', 'Reuse the returned canonical projectPath in later commands.');
   const located = locateInstallation();
-  add('duplicate-installations', located.candidates.length > 1 ? 'WARN' : 'PASS', { selected: located.selected, candidates: located.candidates.map((item) => item.path) }, 'Multiple copies can cause agents to execute a stale CLI.', 'Use the selected installation from `vibecat locate --json` and remove obsolete copies explicitly.');
+  add('duplicate-installations', located.divergent ? 'WARN' : 'PASS', { selected: located.selected, candidates: located.candidates.map((item) => item.path), divergent: located.divergent }, 'Divergent copies can cause agents to execute a stale CLI.', 'Use the selected installation from `vibecat locate --json` and remove obsolete or divergent copies explicitly.');
   add('project-path', fs.existsSync(project.projectPath) ? 'PASS' : 'FAIL', project.projectPath, 'The source project must exist.', 'Pass a valid absolute project path.');
   let writable = true; try { fs.accessSync(project.projectPath, fs.constants.W_OK); } catch { writable = false; }
   add('project-writable', writable ? 'PASS' : 'FAIL', { writable }, 'Build and configuration output require write access.', 'Grant the current user write access to the project.');
@@ -212,4 +218,4 @@ async function runDoctor(project) {
   return { checks, coreReady: !checks.some((check) => check.status === 'FAIL' && !['browser-bridge', 'scriptcat-client'].includes(check.name)), browserReady: checks.filter((check) => ['browser-bridge', 'scriptcat-client'].includes(check.name)).every((check) => check.status === 'PASS') };
 }
 
-module.exports = { locateInstallation, resolveContext, statusProject, startSession, stopSession, commandBrowser, pushProject, runDoctor, bundleProject, verifiedOwnedProcess, getHealth, portAvailable };
+module.exports = { selectInstallation, locateInstallation, resolveContext, statusProject, startSession, stopSession, commandBrowser, pushProject, runDoctor, bundleProject, verifiedOwnedProcess, getHealth, portAvailable };
