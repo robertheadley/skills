@@ -124,6 +124,10 @@ async function createSyncServer(options) {
           session = { socket, tabHandle, projectId, url: message.data.url, title: message.data.title, hash: message.data.hash, connectedAt: new Date().toISOString() };
           browserSessions.set(tabHandle, session);
           socket.send(JSON.stringify({ action: 'browserAccepted', data: { tabHandle } }));
+          // Rapid iteration: a page that connects running a stale build refreshes itself to the latest.
+          if (options.reload && lastSourceHash && message.data.hash !== lastSourceHash) {
+            setTimeout(() => { if (browserSessions.get(tabHandle) === session && session.socket.readyState === WebSocket.OPEN) reloadBrowser(); }, 50);
+          }
         } else if (message.action === 'commandResult') {
           const pending = pendingCommands.get(message.requestId);
           if (!pending) return;

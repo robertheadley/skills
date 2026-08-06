@@ -2,6 +2,23 @@
 
 All modifications made to the sync utility codebase by the AI agent.
 
+## [2.0.3] - 2026-08-06
+
+```yaml
+id: vibecat-2.0.3-stale-connect-autoreload
+timestamp: 2026-08-06T20:45:00+00:00
+what: Closed the last manual-reload gap in rapid iteration. In reload mode, a page bridge that connects while running a stale build (hash older than the latest delivered build) is now auto-refreshed 50ms after registration, so opening a tab is enough — the page upgrades itself to the latest build without a manual reload. Pages already running the current build are left untouched.
+why: The first page load after a new project still required a manual reload before the bridge existed; with connect-time staleness detection the first open tab self-corrects and every later sync keeps it current.
+components:
+  - src/server.js (browserHello staleness check, gated on reload mode)
+  - tests/sync-server.test.js (stale connect refreshes; current connect untouched)
+type: patch
+validation:
+  - npm run lint
+  - npm test
+  - npm run check
+```
+
 ## [2.0.2] - 2026-08-06
 
 ```yaml

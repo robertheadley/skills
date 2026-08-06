@@ -153,3 +153,34 @@ test('without reload mode the page is not reloaded on delivery', async (t) => {
   assert.equal(reloaded, false);
   assert.equal(f.server.health().reload, false);
 });
+
+async function rawBrowser(server, projectId, hash) {
+  const { token } = server.getDebugConfig();
+  const socket = new WebSocket(`ws://127.0.0.1:${server.address().port}/?role=browser&token=${encodeURIComponent(token)}`);
+  await new Promise((resolve, reject) => { socket.once('open', resolve); socket.once('error', reject); });
+  socket.send(JSON.stringify({ action: 'browserHello', data: { projectId, hash, url: 'https://example.com/', title: 'Tab', sessionNonce: `n-${Math.random()}` } }));
+  await nextJson(socket, (message) => message.action === 'browserAccepted');
+  return socket;
+}
+
+test('reload mode refreshes a connecting page that runs a stale build', async (t) => {
+  const f = await fixture({ reload: true, projectId: 'stale-connect-project' }); t.after(() => f.close());
+  const extension = await connectExtension(f.server); t.after(() => extension.close());
+  fs.writeFileSync(f.filePath, userscript('3.0.0', 'console.log("latest");')); await f.server.syncNow('seed');
+  const browser = await rawBrowser(f.server, 'stale-connect-project', 'stale-hash'); t.after(() => browser.close());
+  const command = await nextJson(browser, (message) => message.action === 'command' && message.operation === 'reload');
+  assert.equal(command.operation, 'reload');
+});
+
+test('reload mode leaves a connecting page running the current build alone', async (t) => {
+  const f = await fixture({ reload: true, projectId: 'current-connect-project' }); t.after(() => f.close());
+  const extension = await connectExtension(f.server); t.after(() => extension.close());
+  fs.writeFileSync(f.filePath, userscript('3.0.1', 'console.log("current");')); const delivery = await f.server.syncNow('seed');
+  const browser = await rawBrowser(f.server, 'current-connect-project', delivery.hash); t.after(() => browser.close());
+  let reloaded = false;
+  const watcher = (raw) => { const message = JSON.parse(raw.toString()); if (message.action === 'command' && message.operation === 'reload') reloaded = true; };
+  browser.on('message', watcher);
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  browser.off('message', watcher);
+  assert.equal(reloaded, false);
+});
