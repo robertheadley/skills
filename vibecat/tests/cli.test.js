@@ -38,6 +38,7 @@ test('init scaffolds a base userscript and refuses to overwrite', (t) => {
   assert.equal(content.startsWith('// ==UserScript=='), true);
   assert.equal(content.includes('@match        https://www.reddit.com/*'), true);
   assert.equal(content.includes('@name         Reddit Clean'), true);
+  assert.equal(content.includes('@inject-into  content'), true);
   const second = run(['init', '--project', directory, '--name', 'Reddit Clean', '--json']);
   assert.equal(second.status, 1); assert.equal(JSON.parse(second.stdout).errors[0].code, 'INIT_TARGET_EXISTS');
 });

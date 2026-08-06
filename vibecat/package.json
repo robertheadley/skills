@@ -1,6 +1,6 @@
 {
   "name": "vibecat",
-  "version": "2.0.7",
+  "version": "2.0.8",
   "description": "Deterministic browser-aware userscript development for coding agents.",
   "main": "sync-server.js",
   "bin": {

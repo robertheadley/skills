@@ -2,6 +2,24 @@
 
 All modifications made to the sync utility codebase by the AI agent.
 
+## [2.0.8] - 2026-08-06
+
+```yaml
+id: vibecat-2.0.8-inject-into-content
+timestamp: 2026-08-06T22:30:00+00:00
+what: Made `vibecat init` scaffold scripts with `@inject-into content` so they run in the content-script/isolated world by default. ScriptCat's default injection environment is the page world, where strict site CSPs (duckduckgo.com connect-src, etc.) block the bridge's `ws://127.0.0.1` connection; the isolated world is exempt from page CSPs, so scaffolded scripts connect on first load on CSP-strict sites. The operating contract's recovery section now documents the failure signature and the fix.
+why: Live duckduckgo.com testing showed the script running but the bridge never registering; the page console revealed the CSP blocking the WebSocket.
+components:
+  - bin/vibecat.js (init template adds @inject-into content)
+  - tests/cli.test.js (init template assertion)
+  - skills/sync-scriptcat-userscripts/SKILL.md (recovery note)
+type: patch
+validation:
+  - npm run lint
+  - npm test
+  - npm run check
+```
+
 ## [2.0.7] - 2026-08-06
 
 ```yaml
