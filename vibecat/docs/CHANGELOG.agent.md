@@ -2,6 +2,25 @@
 
 All modifications made to the sync utility codebase by the AI agent.
 
+## [2.0.6] - 2026-08-06
+
+```yaml
+id: vibecat-2.0.6-refresh-prompt
+timestamp: 2026-08-06T21:40:00+00:00
+what: Added first-class refresh prompts. When a delivery reaches ScriptCat but no page executed the build, CLI results now carry a `prompt` field and human output prints an ACTION NEEDED line telling the user to refresh (or open) the matched URL; the same prompt covers SCRIPTCAT_NOT_CONNECTED with setup instructions. In the page, the injected bridge gained a notify operation: in default (non-reload) mode the server sends a toast to the connected page on every delivery ("new build synced — refresh to apply") and to pages that connect on a stale build, so the user is prompted in-page instead of silently running an old version. Reload mode keeps auto-refreshing with no prompt.
+why: The refresh instruction existed only as a dry nextAction buried in error output; the user should be prompted clearly, in the terminal and in the page, once a script has been injected.
+components:
+  - bin/vibecat.js (prompt field, human ACTION NEEDED line)
+  - src/server.js (notifyBrowser, delivery + stale-connect notify in default mode)
+  - src/browser-bridge.js (notify toast operation)
+  - tests/sync-server.test.js (delivery notify, stale-connect notify, toast DOM)
+type: patch
+validation:
+  - npm run lint
+  - npm test
+  - npm run check
+```
+
 ## [2.0.5] - 2026-08-06
 
 ```yaml

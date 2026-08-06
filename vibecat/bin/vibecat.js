@@ -57,6 +57,7 @@ function parseArgs(argv) {
 }
 function human(output) {
   const lines = [`VibeCat: ${output.state}`];
+  if (output.prompt) lines.push(`ACTION NEEDED: ${output.prompt}`);
   if (output.projectPath) lines.push(`Project: ${output.projectPath}`);
   if (output.entryPoint) lines.push(`Entry: ${output.entryPoint}`);
   if (output.outputFile) lines.push(`Output: ${output.outputFile}`);
@@ -313,11 +314,12 @@ async function main(argv = process.argv.slice(2)) {
     return 0;
   } catch (rawError) {
     const error = asVibeCatError(rawError); const command = positionals.slice(0, 2).join(' ') || 'unknown'; const context = {};
+    const prompt = error.code === 'BROWSER_EXECUTION_NOT_ACKNOWLEDGED' ? 'Refresh (or open) the matched URL in your browser so ScriptCat can inject the updated script.' : error.code === 'SCRIPTCAT_NOT_CONNECTED' ? 'Enable ScriptCat development synchronization for this project in your browser extension, then run push again.' : null;
     try { if (options.project) context.projectPath = normalizePath(String(options.project)); } catch {}
     if (options.project && ['bootstrap', 'start', 'connect', 'build', 'watch', 'push', 'validate'].includes(positionals[0])) {
       try { const project = projectFrom(options); writeState(project.projectPath, { state: 'ERROR', lastError: { code: error.code, message: error.message, timestamp: new Date().toISOString() } }); } catch {}
     }
-    emit(failedResult(command, error, context), json);
+    emit(failedResult(command, error, prompt ? { ...context, prompt } : context), json);
     return error.exitCode || 1;
   }
 }

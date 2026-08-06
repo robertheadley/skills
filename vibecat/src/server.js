@@ -124,9 +124,13 @@ async function createSyncServer(options) {
           session = { socket, tabHandle, projectId, url: message.data.url, title: message.data.title, hash: message.data.hash, connectedAt: new Date().toISOString() };
           browserSessions.set(tabHandle, session);
           socket.send(JSON.stringify({ action: 'browserAccepted', data: { tabHandle } }));
-          // Rapid iteration: a page that connects running a stale build refreshes itself to the latest.
-          if (options.reload && lastSourceHash && message.data.hash !== lastSourceHash) {
-            setTimeout(() => { if (browserSessions.get(tabHandle) === session && session.socket.readyState === WebSocket.OPEN) reloadBrowser(); }, 50);
+          // Rapid iteration: a page that connects running a stale build refreshes itself (reload mode) or prompts the user (default).
+          if (lastSourceHash && message.data.hash !== lastSourceHash) {
+            setTimeout(() => {
+              if (browserSessions.get(tabHandle) === session && session.socket.readyState === WebSocket.OPEN) {
+                if (options.reload) reloadBrowser(); else notifyBrowser('VibeCat: a newer build is available — refresh this page to apply it.');
+              }
+            }, 50);
           }
         } else if (message.action === 'commandResult') {
           const pending = pendingCommands.get(message.requestId);
@@ -158,6 +162,12 @@ async function createSyncServer(options) {
     session.socket.send(JSON.stringify({ action: 'command', requestId: `ctl_${crypto.randomBytes(6).toString('hex')}`, operation: 'reload', args: {} }));
     return { sent: true, tabHandle: session.tabHandle };
   }
+  function notifyBrowser(message) {
+    const session = activeBrowser();
+    if (!session || session.socket.readyState !== WebSocket.OPEN) return { sent: false };
+    session.socket.send(JSON.stringify({ action: 'command', requestId: `ctl_${crypto.randomBytes(6).toString('hex')}`, operation: 'notify', args: { message } }));
+    return { sent: true, tabHandle: session.tabHandle };
+  }
   async function syncNow(reason = 'manual') {
     const source = fs.readFileSync(filePath, 'utf8');
     const metadata = extractMetadata(source);
@@ -171,7 +181,9 @@ async function createSyncServer(options) {
     lastSourceHash = hash;
     lastDelivery = { buildId: `build_${hash.slice(0, 12)}`, hash, reason, timestamp: new Date().toISOString(), clients: extensionClients.size };
     logger.info(`Synced ${path.basename(filePath)} (${extensionClients.size} client(s), sha256:${hash})`);
-    if (options.reload) reloadBrowser();
+    if (browserSessions.size) {
+      if (options.reload) reloadBrowser(); else notifyBrowser('VibeCat: new build synced — refresh this page to apply it.');
+    }
     return { sent: extensionClients.size > 0, reason: extensionClients.size ? reason : 'no_clients', hash, clients: extensionClients.size, buildId: lastDelivery.buildId };
   }
   function address() { const value = server.address(); return value && typeof value === 'object' ? value : { address: host, port }; }

@@ -188,6 +188,15 @@ function browserBridgeRuntime(config) {
       case 'mutationsStop': if (mutationObserver) mutationObserver.disconnect(); mutationObserver = null; return { active: false, retained: mutations.length };
       case 'screenshot': return screenshot(args && args.handle ? resolveHandle(args.handle) : null);
       case 'reload': { location.reload(); return { reloading: true }; }
+      case 'notify': {
+        const toast = document.createElement('div');
+        toast.setAttribute('role', 'status');
+        toast.style.cssText = 'position:fixed;top:12px;right:12px;z-index:2147483647;background:#111;color:#fff;padding:10px 14px;border-radius:8px;font:13px/1.4 system-ui,sans-serif;box-shadow:0 2px 12px rgba(0,0,0,.4)';
+        toast.textContent = String(args && args.message || 'VibeCat: refresh to apply the latest build.');
+        document.documentElement.appendChild(toast);
+        setTimeout(() => toast.remove(), 4000);
+        return { notified: true };
+      }
       default: { const error = new Error(`Unsupported browser operation: ${operation}`); /** @type {any} */ (error).code = 'BROWSER_OPERATION_UNSUPPORTED'; throw error; }
     }
   }

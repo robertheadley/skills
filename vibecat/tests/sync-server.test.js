@@ -184,3 +184,38 @@ test('reload mode leaves a connecting page running the current build alone', asy
   browser.off('message', watcher);
   assert.equal(reloaded, false);
 });
+
+test('default mode prompts the page to refresh after delivery (notify, no reload)', async (t) => {
+  const f = await fixture({ projectId: 'notify-delivery-project' }); t.after(() => f.close());
+  const extension = await connectExtension(f.server); t.after(() => extension.close());
+  const browser = await rawBrowser(f.server, 'notify-delivery-project', 'pending'); t.after(() => browser.close());
+  fs.writeFileSync(f.filePath, userscript('3.1.0', 'console.log("notify me");'));
+  const notifyPromise = nextJson(browser, (message) => message.action === 'command' && message.operation === 'notify');
+  await f.server.syncNow('notify-test');
+  const command = await notifyPromise;
+  assert.equal(command.operation, 'notify');
+  assert.equal(typeof command.args.message, 'string');
+  assert.equal(f.server.health().reload, false);
+});
+
+test('default mode prompts a page connecting on a stale build to refresh', async (t) => {
+  const f = await fixture({ projectId: 'notify-stale-project' }); t.after(() => f.close());
+  const extension = await connectExtension(f.server); t.after(() => extension.close());
+  fs.writeFileSync(f.filePath, userscript('3.1.1', 'console.log("latest");')); await f.server.syncNow('seed');
+  const browser = await rawBrowser(f.server, 'notify-stale-project', 'stale-hash'); t.after(() => browser.close());
+  const command = await nextJson(browser, (message) => message.action === 'command' && message.operation === 'notify');
+  assert.equal(command.operation, 'notify');
+});
+
+test('browser bridge notify operation shows a toast in the page', async (t) => {
+  const f = await fixture({ projectId: 'notify-toast-project' }); t.after(() => f.close());
+  const extension = await connectExtension(f.server); t.after(() => extension.close());
+  fs.writeFileSync(f.filePath, userscript('3.1.2', 'console.info("executed");'));
+  const updatePromise = nextJson(extension, (message) => message.action === 'onchange'); await f.server.syncNow('toast-test'); const update = await updatePromise;
+  const dom = await executeDelivered(f.server, update.data.script); t.after(() => dom.window.close());
+  const result = await f.server.sendCommand('notify', { message: 'Refresh me now' }, 2000);
+  assert.equal(result.notified, true);
+  const toast = dom.window.document.querySelector('[role="status"]');
+  assert.equal(toast !== null, true);
+  assert.equal(toast.textContent, 'Refresh me now');
+});
