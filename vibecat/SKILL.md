@@ -17,9 +17,11 @@ Start with:
 
 ```text
 vibecat locate --json
-vibecat doctor --project "<absolute-project-path>" --json
-vibecat bootstrap --project "<absolute-project-path>" --plan --json
-vibecat bootstrap --project "<absolute-project-path>" --execute --json
+vibecat init --project "<absolute-project-path>" --match "<url-pattern>" --json
+vibecat start --project "<absolute-project-path>" --reload --json
+vibecat push --project "<absolute-project-path>" --json
+vibecat connect --wait --project "<absolute-project-path>" --json
+vibecat inspect landmarks --project "<absolute-project-path>" --json
 ```
 
-Use returned JSON and canonical paths as the source of truth. Inspect the live page before writing selectors, require exact-hash browser acknowledgement for push success, require `VALIDATED` when browser validation is configured, and finish with `vibecat stop --project "<canonical-projectPath>" --json`.
+Use returned JSON and canonical paths as the source of truth. Inspect the live page through the injected bridge (`inspect landmarks`, `query`, `screenshot`) before writing selectors — the agent's external browser tools are a fallback, not the default. Require exact-hash browser acknowledgement for push success, require `VALIDATED` when browser validation is configured, and finish with `vibecat stop --project "<canonical-projectPath>" --json`.

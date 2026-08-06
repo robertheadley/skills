@@ -9,17 +9,18 @@ VibeCat is the executable environment. This skill is the operating contract. Scr
 
 ## Start Here
 
+VibeCat debugs through its own injected bridge on the real page. The agent's external browser tools are a fallback only — the default workflow scaffolds a base script, injects it, and reads the live DOM through `vibecat inspect` and `vibecat screenshot`.
+
 1. Run `vibecat locate --json`.
-2. Run `vibecat doctor --project "<absolute-project-path>" --json`.
-3. Resolve every `FAIL` result using its `remediation` field.
-4. Run `vibecat bootstrap --project "<absolute-project-path>" --plan --json`.
-5. Review `fileChanges`, `processActions`, and `permissionSensitive` actions.
-6. Run `vibecat bootstrap --project "<absolute-project-path>" --execute --json`.
-7. Load or reload the intended page, then run `vibecat connect --project "<absolute-project-path>" --json`.
-8. Confirm state `CONNECTED`; inspect the live page before writing selectors.
-9. Run `vibecat watch --project "<absolute-project-path>" --push --json` and confirm `WATCHING`.
-10. Run `vibecat validate --project "<absolute-project-path>" --browser --json` and require `VALIDATED`.
-11. Run `vibecat stop --project "<absolute-project-path>" --json` when finished; repeated stops must remain successful.
+2. Scaffold the base script: `vibecat init --project "<absolute-project-path>" --match "<url-pattern>" --json`. The base script only marks the page ready; selectors are written from bridge inspection data afterward.
+3. Run `vibecat doctor --project "<absolute-project-path>" --json`; resolve every `FAIL` result using its `remediation` field.
+4. Run `vibecat start --project "<absolute-project-path>" --reload --json`.
+5. Run `vibecat push --project "<absolute-project-path>" --json`; delivery success is `delivery.sent=true`.
+6. Open the matched URL in the synchronized browser, then run `vibecat connect --wait --project "<absolute-project-path>" --json`. `--wait` blocks until the page bridge acknowledges (default 60s; raise `--wait-timeout` for slow pages).
+7. Confirm state `CONNECTED`; inspect the live page before writing selectors: `vibecat inspect landmarks --json`, `vibecat query "<selector>" --json`, `vibecat screenshot --output "<absolute.png>" --json`.
+8. Write the real selectors from that inspection data, then run `vibecat watch --project "<absolute-project-path>" --push --reload --json` and confirm `WATCHING`; every save delivers and the page refreshes itself.
+9. Run `vibecat validate --project "<absolute-project-path>" --browser --json` and require `VALIDATED`.
+10. Run `vibecat stop --project "<absolute-project-path>" --json` when finished; repeated stops must remain successful.
 
 Never search manually for this `SKILL.md` after `vibecat locate --json` succeeds. Never infer state from earlier prose; rerun `vibecat status --project "<path>" --json`.
 
@@ -47,18 +48,19 @@ Core commands:
 vibecat help
 vibecat version
 vibecat locate --json
+vibecat init --project "<path>" --match "<url-pattern>" --json
 vibecat install --from "<source>" --json
 vibecat update --from "<source>" --json
 vibecat uninstall --target "<installed-path>" --json
 vibecat doctor --project "<path>" --json
 vibecat bootstrap --project "<path>" --plan --json
 vibecat bootstrap --project "<path>" --execute --json
-vibecat start --project "<path>" --json
+vibecat start --project "<path>" --reload --json
 vibecat status --project "<path>" --json
-vibecat connect --project "<path>" --json
+vibecat connect --project "<path>" --wait --json
 vibecat stop --project "<path>" --json
 vibecat build --project "<path>" --typecheck --json
-vibecat watch --project "<path>" --typecheck --push --json
+vibecat watch --project "<path>" --typecheck --push --reload --json
 vibecat push --project "<path>" --json
 vibecat validate --project "<path>" --typecheck --browser --json
 ```
@@ -222,16 +224,18 @@ Hermes uses this complete canonical sequence and never searches for the skill di
 
 ```text
 vibecat locate --json
+vibecat init --project "<absolute-project-path>" --match "<url-pattern>" --json
 vibecat doctor --project "<absolute-project-path>" --json
-vibecat bootstrap --project "<absolute-project-path>" --plan --json
-vibecat bootstrap --project "<absolute-project-path>" --execute --json
-vibecat status --project "<canonical-projectPath>" --json
-vibecat connect --project "<canonical-projectPath>" --json
-vibecat inspect landmarks --project "<canonical-projectPath>" --json
-vibecat watch --project "<canonical-projectPath>" --push --json
-vibecat validate --project "<canonical-projectPath>" --browser --json
-vibecat stop --project "<canonical-projectPath>" --json
+vibecat start --project "<absolute-project-path>" --reload --json
+vibecat push --project "<absolute-project-path>" --json
+vibecat connect --wait --project "<absolute-project-path>" --json
+vibecat inspect landmarks --project "<absolute-project-path>" --json
+vibecat watch --project "<absolute-project-path>" --push --reload --json
+vibecat validate --project "<absolute-project-path>" --browser --json
+vibecat stop --project "<absolute-project-path>" --json
 ```
+
+Inspection data comes from the injected bridge: `inspect landmarks`, `query`, `query-xpath`, `attributes`, `text`, `styles`, `rect`, `selector suggest`, and `screenshot` all read the real page in the synchronized browser. The agent's own browser tools are a fallback for offline or unbridgeable targets only, never the default source of DOM facts.
 
 This avoids manual skill discovery, literal `/tmp`, shell-path reconstruction, conversational state, inferred next steps, and hidden prompts.
 

@@ -2,6 +2,39 @@
 
 All modifications made to the sync utility codebase by the AI agent.
 
+## [2.0.5] - 2026-08-06
+
+```yaml
+id: vibecat-2.0.5-vibecat-native-workflow
+timestamp: 2026-08-06T21:10:00+00:00
+what: Made the workflow vibecat-native end to end. Added `vibecat init` to scaffold a base userscript (`--project`, `--match`, `--name`; refuses overwrite), added `connect --wait` (`--wait-timeout`, default 60s) so agents block deterministically until the page bridge acknowledges, and rewrote the skill operating contract (root and nested SKILL.md) so the default flow is init -> start --reload -> push -> connect --wait -> inspect through the injected bridge -> watch --push --reload -> validate -> stop. The agent's external browser tools are documented as a fallback only, never the default source of DOM facts.
+why: Agents were using their own browser tools to inspect pages (slow, and bot walls block datacenter browsers); the injected bridge already provides inspect/query/screenshot on the real synchronized page, so the workflow should scaffold a base script, inject it, and debug through vibecat itself.
+components:
+  - bin/vibecat.js (init command, connect --wait, help)
+  - tests/cli.test.js (init scaffold + overwrite refusal)
+  - SKILL.md, skills/sync-scriptcat-userscripts/SKILL.md (vibecat-native workflow)
+type: patch
+validation:
+  - npm run lint
+  - npm test
+  - npm run check
+```
+
+## [2.0.4] - 2026-08-06
+
+```yaml
+id: vibecat-2.0.4-project-lazy-esbuild
+timestamp: 2026-08-06T20:55:00+00:00
+what: Lazy-loaded esbuild in project.js config loading. vibecat.config.ts/.js transpiling was the last eager esbuild require on the CLI startup path (services.js pulls in project.js); esbuild now loads only when a TypeScript/JS config actually needs transpiling, so status, doctor, and start no longer pay ~90ms of module load on projects without a config file.
+components:
+  - src/project.js (lazy esbuild in loadConfig)
+type: patch
+validation:
+  - npm run lint
+  - npm test
+  - npm run check
+```
+
 ## [2.0.3] - 2026-08-06
 
 ```yaml

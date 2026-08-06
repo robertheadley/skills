@@ -25,6 +25,23 @@ test('help, version, and locate emit one valid JSON document', async (t) => {
   const f = await fixture(t); for (const args of [['help', '--json'], ['version', '--json'], ['locate', '--json']]) { const run = f.run(args); assert.equal(run.status, 0); assert.equal(run.stderr, ''); assert.equal(run.json.ok, true); assert.doesNotThrow(() => JSON.parse(run.stdout)); }
 });
 
+test('init scaffolds a base userscript and refuses to overwrite', (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vibecat-cli-init-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const run = (args) => spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8', timeout: 20000, windowsHide: true });
+  const first = run(['init', '--project', directory, '--match', 'https://www.reddit.com/*', '--name', 'Reddit Clean', '--json']);
+  assert.equal(first.status, 0); const output = JSON.parse(first.stdout);
+  assert.equal(output.ok, true); assert.equal(output.state, 'INSTALLED');
+  const entry = path.join(directory, 'reddit-clean.user.js');
+  assert.equal(output.entryPoint, entry); assert.equal(fs.existsSync(entry), true);
+  const content = fs.readFileSync(entry, 'utf8');
+  assert.equal(content.startsWith('// ==UserScript=='), true);
+  assert.equal(content.includes('@match        https://www.reddit.com/*'), true);
+  assert.equal(content.includes('@name         Reddit Clean'), true);
+  const second = run(['init', '--project', directory, '--name', 'Reddit Clean', '--json']);
+  assert.equal(second.status, 1); assert.equal(JSON.parse(second.stdout).errors[0].code, 'INIT_TARGET_EXISTS');
+});
+
 test('doctor distinguishes core readiness from optional browser readiness', async (t) => {
   const f = await fixture(t); const run = f.run(['doctor', '--project', f.directory, '--json']); assert.equal(run.status, 0); assert.equal(run.json.coreReady, true); assert.equal(run.json.browserReady, false);
   assert.equal(run.json.checks.find((check) => check.name === 'browser-bridge').status, 'WARN'); assert.equal(run.json.nextActions.length > 0, true);
