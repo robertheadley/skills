@@ -249,6 +249,7 @@ This avoids manual skill discovery, literal `/tmp`, shell-path reconstruction, c
 - `BROWSER_NOT_CONNECTED`: load/reload the intended tab after service startup, run `connect`, retry.
 - `BROWSER_EXECUTION_NOT_ACKNOWLEDGED`: ScriptCat delivery occurred but page execution did not; reload and retry.
 - Page CSP blocks the bridge (console shows `violates the following Content Security Policy directive: "connect-src ..."`): the site's CSP forbids `ws://127.0.0.1` from the page world. Scripts scaffolded by `vibecat init` carry `@inject-into content` (ScriptCat's content-script/isolated world, where page CSPs do not apply) for this reason; for existing scripts, add that metadata line or switch the script to the manager's sandboxed world, then reload. Strict `connect-src` sites such as duckduckgo.com require this.
+- Screenshot fails with `Tainted canvases may not be exported`: cross-origin images without CORS headers taint the capture canvas; the page's DOM operations (`inspect`, `query`, `styles`, `rect`, `selector test`) remain fully usable, so prefer them for selector work on such pages.
 - `STALE_ELEMENT_HANDLE`: repeat the CSS/XPath query and use the new handle.
 - `STALE_BUILD`: push the latest output, reload the intended page, and validate again.
 - `BROWSER_RUNTIME_ERROR`: inspect the exact-hash event evidence, fix the source, rebuild, push, and revalidate.
