@@ -1,6 +1,6 @@
 {
   "name": "vibecat",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Deterministic browser-aware userscript development for coding agents.",
   "main": "sync-server.js",
   "bin": {
@@ -10,6 +10,7 @@
     "start": "node sync-server.js",
     "vibecat": "node bin/vibecat.js",
     "benchmark": "node scripts/benchmark-build.js",
+    "benchmark:loop": "node scripts/benchmark-loop.js",
     "test": "node --test tests/*.test.js",
     "typecheck": "tsc --project tsconfig.check.json",
     "lint": "node --check bin/vibecat.js && node --check sync-server.js && node --check src/browser-bridge.js && node --check src/services.js",

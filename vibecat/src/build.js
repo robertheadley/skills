@@ -4,8 +4,6 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const crypto = require('node:crypto');
-const esbuild = require('esbuild');
-const ts = require('typescript');
 const { extractMetadata, metadataFromObject } = require('./metadata');
 const { VibeCatError } = require('./errors');
 
@@ -30,6 +28,7 @@ function syntaxCheck(source, filename) {
 
 function runTypecheck(project) {
   if (!project.typed) return { requested: true, passed: true, diagnostics: [] };
+  const ts = require('typescript');
   const configPath = ts.findConfigFile(project.projectPath, ts.sys.fileExists, 'tsconfig.json');
   /** @type {import('typescript').CompilerOptions} */
   let options = { noEmit: true, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.Bundler, allowJsonModule: true, skipLibCheck: true };
@@ -64,6 +63,7 @@ function getMetadata(project, source) {
 }
 
 async function bundleProject(project, options = {}) {
+  const esbuild = require('esbuild');
   const started = Date.now();
   const source = fs.readFileSync(project.entryPoint, 'utf8');
   const metadata = getMetadata(project, source);
@@ -128,6 +128,7 @@ async function bundleProject(project, options = {}) {
 
 async function createWatchContext(project, options = {}) {
   if (!project.typed) throw new VibeCatError('WATCH_CONTEXT_NOT_REQUIRED', 'Plain JavaScript userscripts are watched directly by the sync service.', { retryable: false });
+  const esbuild = require('esbuild');
   const plugin = {
     name: 'vibecat-atomic-output',
     setup(build) {

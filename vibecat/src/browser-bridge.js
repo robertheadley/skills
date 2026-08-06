@@ -187,6 +187,7 @@ function browserBridgeRuntime(config) {
       case 'mutationsClear': mutations.splice(0); return { active: Boolean(mutationObserver), cleared: true };
       case 'mutationsStop': if (mutationObserver) mutationObserver.disconnect(); mutationObserver = null; return { active: false, retained: mutations.length };
       case 'screenshot': return screenshot(args && args.handle ? resolveHandle(args.handle) : null);
+      case 'reload': { location.reload(); return { reloading: true }; }
       default: { const error = new Error(`Unsupported browser operation: ${operation}`); /** @type {any} */ (error).code = 'BROWSER_OPERATION_UNSUPPORTED'; throw error; }
     }
   }

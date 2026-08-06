@@ -2,6 +2,30 @@
 
 All modifications made to the sync utility codebase by the AI agent.
 
+## [2.0.2] - 2026-08-06
+
+```yaml
+id: vibecat-2.0.2-rapid-iteration-loop
+timestamp: 2026-08-06T20:10:00+00:00
+what: Made VibeCat usable as a rapid-iteration tool. Added `--reload` (start, watch --push, push): after every delivered build the server fire-and-forgets a reload command to the connected page bridge, the page reloads, ScriptCat re-executes the bundle, and the new hash is acknowledged; push widens its ack window when reload is requested. Cut CLI startup by lazy-loading esbuild and typescript (previously every command, including `version` and `locate`, paid ~150ms of module load). Cut process-ownership verification cost on Windows by batching PID command-line lookups into one PowerShell call and caching them per project with an 8-second TTL, so status/stop sequences stop paying ~420ms per PID. Reduced the watch-sync debounce from 100ms to 30ms so save-to-delivery lands around 40ms. Added `reload` to server health, a `reloadBrowser` server API, and `scripts/benchmark-loop.js` plus `npm run benchmark:loop` to measure the iteration loop.
+why: A full agent workflow (locate, doctor, bootstrap, status, connect, inspect, watch, push, validate, stop) took minutes, dominated by per-command CLI startup and repeated PowerShell ownership checks, and there was no mechanism for the page to refresh itself with the updated script. The goal is edit -> rebuild -> push -> page reload -> ack in well under two seconds of tool time.
+components:
+  - src/build.js, src/services.js (lazy esbuild/typescript)
+  - src/services.js (batched TTL-cached PID verification, reload session env, push ack window)
+  - src/browser-bridge.js (reload operation)
+  - src/server.js (reloadBrowser, delivery-time reload, health.reload)
+  - sync-server.js (VIBECAT_RELOAD)
+  - bin/vibecat.js (--reload flag, help)
+  - scripts/benchmark-loop.js, package.json (benchmark:loop)
+  - tests/sync-server.test.js (reload bridge op, reload-mode delivery, no-reload guard)
+type: patch
+validation:
+  - npm run lint
+  - npm test
+  - npm run check
+  - npm run benchmark:loop
+```
+
 ## [2.0.1] - 2026-08-06
 
 ```yaml

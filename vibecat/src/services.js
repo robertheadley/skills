@@ -6,8 +6,6 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawn, spawnSync } = require('node:child_process');
 const net = require('node:net');
-const esbuild = require('esbuild');
-const ts = require('typescript');
 const { APP_ROOT, DEFAULT_HOST } = require('./constants');
 const { resolveProject } = require('./project');
 const { projectKey, detectEnvironment, normalizePath } = require('./paths');
@@ -44,22 +42,38 @@ function locateInstallation() {
 }
 
 function processExists(pid) { try { process.kill(pid, 0); return true; } catch { return false; } }
-function processCommandLine(pid) {
-  if (!pid) return null;
-  if (process.platform === 'win32') {
-    const escaped = String(Number(pid));
-    const result = spawnSync('powershell.exe', ['-NoProfile', '-Command', `(Get-CimInstance Win32_Process -Filter "ProcessId=${escaped}" -ErrorAction SilentlyContinue).CommandLine`], { encoding: 'utf8', windowsHide: true });
-    return result.status === 0 ? result.stdout.trim() : null;
+const PID_CACHE_TTL_MS = 8000;
+function pidCachePath(projectPath) { return path.join(stateDir(projectPath), 'pid-cache.json'); }
+function readPidCache(projectPath) { try { return JSON.parse(fs.readFileSync(pidCachePath(projectPath), 'utf8')); } catch { return {}; } }
+function processCommandLines(pids, projectPath) {
+  const unique = [...new Set(pids.filter(Boolean).map((pid) => String(Number(pid))))];
+  const result = new Map();
+  if (!unique.length) return result;
+  const cache = readPidCache(projectPath); const now = Date.now(); const missing = [];
+  for (const pid of unique) { const hit = cache[pid]; if (hit && now - hit.ts < PID_CACHE_TTL_MS) result.set(pid, hit.cmdline); else missing.push(pid); }
+  if (missing.length) {
+    const fetched = new Map();
+    if (process.platform === 'win32') {
+      const filter = missing.map((pid) => `ProcessId=${pid}`).join(' or ');
+      const spawned = spawnSync('powershell.exe', ['-NoProfile', '-Command', `(Get-CimInstance Win32_Process -Filter "${filter}" -ErrorAction SilentlyContinue) | ForEach-Object { $_.ProcessId.ToString() + '|' + $_.CommandLine }`], { encoding: 'utf8', windowsHide: true });
+      if (spawned.status === 0) for (const line of spawned.stdout.split('\n').map((item) => item.trimEnd())) { const sep = line.indexOf('|'); if (sep > 0) fetched.set(line.slice(0, sep), line.slice(sep + 1)); }
+    } else {
+      for (const pid of missing) {
+        try { fetched.set(pid, fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').replace(/\0/g, ' ')); } catch {
+          const spawned = spawnSync('ps', ['-p', pid, '-o', 'command='], { encoding: 'utf8' }); if (spawned.status === 0) fetched.set(pid, spawned.stdout.trim());
+        }
+      }
+    }
+    for (const pid of missing) { const cmdline = fetched.get(pid) || null; cache[pid] = { cmdline, ts: now }; result.set(pid, cmdline); }
+    try { fs.mkdirSync(stateDir(projectPath), { recursive: true }); fs.writeFileSync(pidCachePath(projectPath), JSON.stringify(cache)); } catch { /* cache is best-effort */ }
   }
-  try { return fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').replace(/\0/g, ' '); } catch {
-    const result = spawnSync('ps', ['-p', String(pid), '-o', 'command='], { encoding: 'utf8' });
-    return result.status === 0 ? result.stdout.trim() : null;
-  }
+  return result;
 }
+function processCommandLine(pid, projectPath) { return processCommandLines([pid], projectPath).get(String(Number(pid))) || null; }
 function verifiedOwnedProcess(state, kind = 'service') {
   const pid = kind === 'watcher' ? state && state.watcherPid : state && state.pid;
   if (!pid || !processExists(pid)) return null;
-  const commandLine = processCommandLine(pid);
+  const commandLine = processCommandLine(pid, state.projectPath);
   const marker = kind === 'watcher' ? 'watch-worker.js' : 'sync-server.js';
   if (!commandLine || !commandLine.includes(marker) || !commandLine.includes(state.projectPath)) {
     throw new VibeCatError('PROCESS_OWNERSHIP_MISMATCH', `PID ${pid} exists but is not the recorded VibeCat ${kind}.`, {
@@ -116,7 +130,7 @@ async function startSession(project, options = {}) {
   writeState(project.projectPath, { state: 'STARTING', sessionId, token, ownerNonce, port: project.port, outputFile: project.outputFile, stdoutPath, stderrPath, eventLog });
   const child = spawn(process.execPath, [path.join(APP_ROOT, 'sync-server.js'), project.outputFile, '--owner', ownerNonce], {
     cwd: APP_ROOT, detached: true, stdio: ['ignore', out, err], windowsHide: true,
-    env: { ...process.env, VIBECAT_PORT: String(project.port), VIBECAT_SESSION_TOKEN: token, VIBECAT_PROJECT_ID: projectKey(project.projectPath), VIBECAT_EVENT_LOG: eventLog },
+    env: { ...process.env, VIBECAT_PORT: String(project.port), VIBECAT_SESSION_TOKEN: token, VIBECAT_PROJECT_ID: projectKey(project.projectPath), VIBECAT_EVENT_LOG: eventLog, VIBECAT_RELOAD: options.reload ? '1' : '0' },
   });
   fs.closeSync(out); fs.closeSync(err); child.unref();
   writeState(project.projectPath, { state: 'STARTING', pid: child.pid, startedAt: new Date().toISOString() });
@@ -172,7 +186,7 @@ async function pushProject(project, options = {}) {
   if (path.resolve(filePath) !== path.resolve(state.outputFile)) throw new VibeCatError('PUSH_FILE_MISMATCH', 'The running service watches a different output file.', { evidence: { requested: filePath, watched: state.outputFile }, retryable: true, nextActions: ['Stop and restart VibeCat with the requested project output.'] });
   const response = await requestJson({ port: state.port, pathname: '/api/push', method: 'POST', token: state.token, body: {}, timeoutMs: 5000 });
   if (!response.body || !response.body.ok) throw new VibeCatError('PUSH_FAILED', response.body && response.body.error && response.body.error.message || 'Push failed.', { retryable: true });
-  const delivery = response.body.data; const deadline = Date.now() + Number(options.ackTimeoutMs || 5000); let health;
+  const delivery = response.body.data; const deadline = Date.now() + Number(options.ackTimeoutMs || (options.reload ? 10000 : 5000)); let health;
   do { health = await getHealth(state); if (health && health.browser && health.browser.connected && health.browser.hash === delivery.hash) break; await new Promise((resolve) => setTimeout(resolve, 150)); } while (Date.now() < deadline);
   const acknowledged = Boolean(health && health.browser && health.browser.connected && health.browser.hash === delivery.hash);
   if (!delivery.sent) throw new VibeCatError('SCRIPTCAT_NOT_CONNECTED', 'No ScriptCat extension client acknowledged a live connection, so the bundle was not delivered.', { evidence: { delivery, browser: health && health.browser }, retryable: true, nextActions: ['Enable ScriptCat development synchronization for this VibeCat service.', 'Run `vibecat status --json` and retry.'] });
@@ -195,6 +209,7 @@ async function runDoctor(project) {
   add('project-writable', writable ? 'PASS' : 'FAIL', { writable }, 'Build and configuration output require write access.', 'Grant the current user write access to the project.');
   add('configuration', 'PASS', project.configPath || 'implicit defaults', 'Project settings must load deterministically.', 'Fix vibecat.config.*.');
   add('entry-point', fs.existsSync(project.entryPoint) ? 'PASS' : 'FAIL', project.entryPoint, 'A source entry is required.', 'Configure `entry` or create src/main.ts.');
+  const esbuild = require('esbuild'); const ts = require('typescript');
   add('typescript', project.typed && !ts.version ? 'FAIL' : 'PASS', { requested: project.typed, version: ts.version }, 'TypeScript projects need compiler diagnostics.', 'Run npm install in the VibeCat installation.');
   add('esbuild', esbuild.version ? 'PASS' : 'FAIL', { version: esbuild.version }, 'Module bundling requires esbuild.', 'Run npm install in the VibeCat installation.');
   const metadata = extractMetadata(fs.readFileSync(project.entryPoint, 'utf8'));

@@ -28,6 +28,7 @@ async function main() {
     projectId: process.env.VIBECAT_PROJECT_ID,
     debugLogPath: process.env.VIBECAT_EVENT_LOG,
     watch: !args.includes('--no-watch'),
+    reload: process.env.VIBECAT_RELOAD === '1',
   });
   const address = server.address();
   console.log(`VibeCat service listening on http://${address.address}:${address.port}`);

@@ -33,6 +33,7 @@ Capture:    screenshot
 
 Common options:
   --project <absolute-path>  Target userscript project
+  --reload                   Auto-reload the connected page after every delivered build (start, watch --push, push)
   --json                     Emit one JSON result on stdout
   --help                     Show help
 `;
@@ -45,7 +46,7 @@ function parseArgs(argv) {
     const equal = value.indexOf('=');
     if (equal > 0) { options[value.slice(2, equal)] = value.slice(equal + 1); continue; }
     const name = value.slice(2);
-    if (index + 1 < argv.length && !argv[index + 1].startsWith('--') && !['json', 'plan', 'execute', 'force', 'typecheck', 'production', 'push', 'validate', 'browser', 'visible-only', 'minify', 'connect'].includes(name)) options[name] = argv[++index];
+    if (index + 1 < argv.length && !argv[index + 1].startsWith('--') && !['json', 'plan', 'execute', 'force', 'typecheck', 'production', 'push', 'validate', 'browser', 'visible-only', 'minify', 'connect', 'reload'].includes(name)) options[name] = argv[++index];
     else options[name] = true;
   }
   return { options, positionals };
@@ -86,7 +87,7 @@ async function startWatcher(project, options) {
     writeState(project.projectPath, { lastBuild: initialBuild });
   }
   let status = await statusProject(project);
-  if (!status.health && options.push) status = await startSession(project);
+  if (!status.health && options.push) status = await startSession(project, { reload: Boolean(options.reload) });
   if (status.watcherOwned) return statusProject(project);
   const runtime = stateDir(project.projectPath); fs.mkdirSync(runtime, { recursive: true });
   const stdoutPath = path.join(runtime, 'watch.stdout.jsonl'); const stderrPath = path.join(runtime, 'watch.stderr.jsonl');
@@ -192,7 +193,7 @@ async function execute(positionals, options) {
   }
   if (command === 'start') {
     if (!fs.existsSync(project.outputFile) || project.typed) { const build = await bundleProject(project, { typecheck: options.typecheck }); writeState(project.projectPath, { lastBuild: build }); }
-    const status = await startSession(project); return result('start', { state: status.lifecycle, projectPath: project.projectPath, sessionId: status.state && status.state.sessionId, service: status.health, browser: status.health && status.health.browser || { connected: false }, nextActions: status.health && status.health.browser.connected ? ['Run `vibecat inspect landmarks --json`.'] : ['Load or reload the userscript in the intended tab, then run `vibecat connect --json`.'] });
+    const status = await startSession(project, { reload: Boolean(options.reload) }); return result('start', { state: status.lifecycle, projectPath: project.projectPath, sessionId: status.state && status.state.sessionId, service: status.health, browser: status.health && status.health.browser || { connected: false }, nextActions: status.health && status.health.browser.connected ? ['Run `vibecat inspect landmarks --json`.'] : ['Load or reload the userscript in the intended tab, then run `vibecat connect --json`.'] });
   }
   if (command === 'connect') {
     const status = await statusProject(project);
@@ -215,7 +216,7 @@ async function execute(positionals, options) {
   }
   if (command === 'push') {
     writeState(project.projectPath, { state: 'PUSHING' });
-    const pushed = await pushProject(project, { file: options.file, ackTimeoutMs: options['ack-timeout'] }); return result('push', { state: 'PUSHED', projectPath: project.projectPath, ...pushed.delivery, pushed: true, browserAcknowledged: true, browser: pushed.browser, nextActions: ['Run `vibecat validate --json`.'] });
+    const pushed = await pushProject(project, { file: options.file, ackTimeoutMs: options['ack-timeout'], reload: Boolean(options.reload) }); return result('push', { state: 'PUSHED', projectPath: project.projectPath, ...pushed.delivery, pushed: true, browserAcknowledged: true, browser: pushed.browser, nextActions: ['Run `vibecat validate --json`.'] });
   }
 
   const inspectionMap = {

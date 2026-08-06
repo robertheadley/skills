@@ -109,3 +109,47 @@ test('browser bridge authentication and project scoping reject incorrect tokens 
   await new Promise((resolve) => wrongProject.once('open', resolve)); wrongProject.send(JSON.stringify({ action: 'browserHello', data: { projectId: 'wrong', hash: 'x', url: 'https://example.com', title: 'x', sessionNonce: 'x' } }));
   const closeCode = await new Promise((resolve) => wrongProject.once('close', resolve)); assert.equal(closeCode, 4003);
 });
+
+async function connectBrowser(server, projectId) {
+  const { token } = server.getDebugConfig();
+  const socket = new WebSocket(`ws://127.0.0.1:${server.address().port}/?role=browser&token=${encodeURIComponent(token)}`);
+  await new Promise((resolve, reject) => { socket.once('open', resolve); socket.once('error', reject); });
+  socket.send(JSON.stringify({ action: 'browserHello', data: { projectId, hash: 'pending', url: 'https://example.com/', title: 'Test Page', sessionNonce: 'nonce-1' } }));
+  await nextJson(socket, (message) => message.action === 'browserAccepted');
+  return socket;
+}
+
+test('browser bridge reload operation triggers a page reload', async (t) => {
+  const f = await fixture({ projectId: 'bridge-reload-project' }); t.after(() => f.close()); const extension = await connectExtension(f.server); t.after(() => extension.close());
+  fs.writeFileSync(f.filePath, userscript('2.0.3', 'console.info("executed");'));
+  const updatePromise = nextJson(extension, (message) => message.action === 'onchange'); await f.server.syncNow('bridge-reload'); const update = await updatePromise;
+  const dom = await executeDelivered(f.server, update.data.script); t.after(() => dom.window.close());
+  const result = await f.server.sendCommand('reload', {}, 2000); assert.equal(result.reloading, true);
+});
+
+test('reload mode auto-reloads the connected page after every delivery', async (t) => {
+  const f = await fixture({ reload: true, projectId: 'reload-test-project' }); t.after(() => f.close());
+  const extension = await connectExtension(f.server); t.after(() => extension.close());
+  const browser = await connectBrowser(f.server, 'reload-test-project'); t.after(() => browser.close());
+  fs.writeFileSync(f.filePath, userscript('2.0.1', 'console.log("reload me");'));
+  const reloadPromise = nextJson(browser, (message) => message.action === 'command' && message.operation === 'reload');
+  await f.server.syncNow('reload-test');
+  const command = await reloadPromise;
+  assert.equal(command.operation, 'reload');
+  assert.equal(f.server.health().reload, true);
+});
+
+test('without reload mode the page is not reloaded on delivery', async (t) => {
+  const f = await fixture({ projectId: 'no-reload-project' }); t.after(() => f.close());
+  const extension = await connectExtension(f.server); t.after(() => extension.close());
+  const browser = await connectBrowser(f.server, 'no-reload-project'); t.after(() => browser.close());
+  fs.writeFileSync(f.filePath, userscript('2.0.2', 'console.log("stay");'));
+  let reloaded = false;
+  const watcher = (raw) => { const message = JSON.parse(raw.toString()); if (message.action === 'command' && message.operation === 'reload') reloaded = true; };
+  browser.on('message', watcher);
+  await f.server.syncNow('no-reload-test');
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  browser.off('message', watcher);
+  assert.equal(reloaded, false);
+  assert.equal(f.server.health().reload, false);
+});
