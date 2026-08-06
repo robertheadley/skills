@@ -3,7 +3,6 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const Module = require('node:module');
-const esbuild = require('esbuild');
 const { normalizePath } = require('./paths');
 const { VibeCatError } = require('./errors');
 
@@ -19,6 +18,7 @@ function loadConfig(projectPath) {
       delete require.cache[require.resolve(configPath)];
       return { config: require(configPath), configPath };
     }
+    const esbuild = require('esbuild');
     const built = esbuild.buildSync({
       entryPoints: [configPath], bundle: true, write: false, platform: 'node', format: 'cjs',
       target: `node${process.versions.node.split('.')[0]}`, logLevel: 'silent',
