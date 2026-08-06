@@ -59,6 +59,16 @@ test('metadata generation and duplicate singleton validation are deterministic',
   const invalid = extractMetadata(`${HEADER.replace('@version 1.0.0', '@version 1.0.0\n// @version 2.0.0')}\n`); assert.equal(invalid.valid, false); assert.equal(invalid.errors.some((error) => error.code === 'METADATA_DUPLICATE'), true);
 });
 
+test('ScriptCat metadata fields (inject-into, run-in, early-start, background, crontab) are accepted', () => {
+  const source = `// ==UserScript==\n// @name         ScriptCat Fields\n// @version      1.0.0\n// @match        https://duckduckgo.com/*\n// @inject-into  content\n// @run-in       document-start\n// @early-start\n// @background\n// @crontab      */5 * * * *\n// ==/UserScript==\nconsole.log('fields');\n`;
+  const metadata = extractMetadata(source);
+  assert.equal(metadata.valid, true);
+  assert.equal(metadata.fields['inject-into'][0], 'content');
+  assert.equal(metadata.fields['run-in'][0], 'document-start');
+  assert.equal(metadata.fields['background'][0], '');
+  assert.equal(metadata.fields['crontab'][0], '*/5 * * * *');
+});
+
 test('incremental esbuild context survives a syntax error and recovers on the next save', async (t) => {
   const directory = tempProject(); t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
   const entry = write(directory, 'src/main.ts', `${HEADER}\nconsole.log('first');`); write(directory, 'vibecat.config.cjs', `module.exports={entry:'src/main.ts',output:'dist/out.user.js',build:{sourcemap:false}}`);

@@ -3,8 +3,10 @@
 const REPEATABLE = new Set(['match', 'include', 'exclude', 'grant', 'require', 'resource', 'connect']);
 const SUPPORTED = new Set([
   'name', 'namespace', 'version', 'description', 'author', 'homepage', 'homepageURL',
-  'supportURL', 'match', 'include', 'exclude', 'grant', 'run-at', 'require', 'resource',
-  'connect', 'noframes', 'downloadURL', 'updateURL', 'uuid',
+  'supportURL', 'icon', 'iconURL', 'license', 'match', 'include', 'exclude', 'grant',
+  'run-at', 'run-in', 'early-start', 'inject-into', 'storageName', 'background', 'crontab',
+  'require', 'require-css', 'resource', 'connect', 'noframes', 'downloadURL', 'updateURL',
+  'uuid', 'antifeature',
 ]);
 
 function extractMetadata(source) {

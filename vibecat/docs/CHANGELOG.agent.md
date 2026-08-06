@@ -2,6 +2,23 @@
 
 All modifications made to the sync utility codebase by the AI agent.
 
+## [2.0.9] - 2026-08-06
+
+```yaml
+id: vibecat-2.0.9-scriptcat-metadata-fields
+timestamp: 2026-08-06T22:45:00+00:00
+what: Extended the metadata parser's supported field set with the ScriptCat-standard directives `inject-into`, `run-in`, `early-start`, `storageName`, `background`, `crontab`, `require-css`, `antifeature`, `icon`, `iconURL`, and `license`. The 2.0.8 init template emits `@inject-into content`, but the parser rejected it (METADATA_FIELD_UNSUPPORTED), so watch/push silently failed to deliver CSP-safe scripts (`Watch sync failed: Unsupported metadata field: @inject-into` in service stderr). Added a unit test covering the new fields.
+why: The init template and the parser disagreed; live duckduckgo.com delivery of the @inject-into fix failed server-side until the parser learned the field.
+components:
+  - src/metadata.js (SUPPORTED set)
+  - tests/build.test.js (ScriptCat fields unit test)
+type: fix
+validation:
+  - npm run lint
+  - npm test
+  - npm run check
+```
+
 ## [2.0.8] - 2026-08-06
 
 ```yaml
