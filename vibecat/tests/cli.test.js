@@ -54,6 +54,16 @@ test('bootstrap plan is non-mutating and execute starts an owned service', async
   const status = f.run(['status', '--project', f.directory, '--json']); assert.equal(status.json.state, 'RUNNING'); assert.equal(status.json.service.pid > 0, true);
 });
 
+test('connect --wait honors --wait-timeout in seconds', async (t) => {
+  const f = await fixture(t); const boot = f.run(['bootstrap', '--project', f.directory, '--execute', '--json']); assert.equal(boot.status, 0);
+  const started = Date.now();
+  const connect = f.run(['connect', '--wait', '--wait-timeout', '2', '--project', f.directory, '--json']);
+  const elapsed = Date.now() - started;
+  assert.equal(connect.status, 1); assert.equal(connect.json.errors[0].code, 'BROWSER_NOT_CONNECTED');
+  // 2 seconds requested; the previous units bug waited ~1ms. Wide margin avoids CI flakiness.
+  assert.equal(elapsed >= 1500, true, `expected >= 1500ms of waiting, got ${elapsed}ms`);
+});
+
 test('stop terminates only recorded owned processes and is idempotent', async (t) => {
   const f = await fixture(t); assert.equal(f.run(['start', '--project', f.directory, '--json']).status, 0);
   const first = f.run(['stop', '--project', f.directory, '--json']); assert.equal(first.status, 0); assert.equal(first.json.stopped.some((item) => item.kind === 'service'), true);

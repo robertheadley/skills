@@ -2,6 +2,23 @@
 
 All modifications made to the sync utility codebase by the AI agent.
 
+## [2.0.7] - 2026-08-06
+
+```yaml
+id: vibecat-2.0.7-wait-timeout-seconds
+timestamp: 2026-08-06T22:05:00+00:00
+what: Fixed a units bug in `connect --wait --wait-timeout`. The deadline was computed as `Date.now() + Number(seconds)` — milliseconds — so a user-supplied timeout like `--wait-timeout 8` waited 8ms instead of 8s (the 60s default worked only because it was already in milliseconds). The deadline is now `Date.now() + Number(seconds) * 1000` per the documented seconds semantics. Added a regression test that asserts `connect --wait --wait-timeout 2` actually blocks for at least 1.5s.
+why: Live testing of the duckduckgo.com workflow showed connect --wait returning in ~0.5s regardless of the requested window, which silently defeated the deterministic bridge-wait workflow introduced in 2.0.5.
+components:
+  - bin/vibecat.js (deadline computation)
+  - tests/cli.test.js (wait-timeout regression test)
+type: fix
+validation:
+  - npm run lint
+  - npm test
+  - npm run check
+```
+
 ## [2.0.6] - 2026-08-06
 
 ```yaml

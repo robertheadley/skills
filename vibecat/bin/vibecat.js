@@ -216,7 +216,7 @@ async function execute(positionals, options) {
     let status = await statusProject(project);
     if (!status.health) throw new VibeCatError('SERVICE_NOT_RUNNING', 'The VibeCat service is not running.', { retryable: true, nextActions: ['Run `vibecat start --json`.'] });
     if (options.wait && !status.health.browser.connected) {
-      const deadline = Date.now() + Number(options['wait-timeout'] || 60000);
+      const deadline = Date.now() + Number(options['wait-timeout'] || 60) * 1000;
       while (Date.now() < deadline && !status.health.browser.connected) {
         await new Promise((resolve) => setTimeout(resolve, 250));
         status = await statusProject(project);
