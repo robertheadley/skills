@@ -159,6 +159,14 @@ async function stopSession(project) {
     stopped.push({ kind, pid: owned.pid });
   }
   const preserved = { projectPath: project.projectPath, state: 'STOPPED', stoppedAt: new Date().toISOString(), port: state.port, outputFile: state.outputFile };
+  // Preserve the runtime event log across stop so `vibecat events` keeps
+  // working after the session ends. The durable copy lives in the project's
+  // `.vibecat/` directory; the next start replaces the live runtime log.
+  const runtimeEventLog = state.eventLog && fs.existsSync(state.eventLog) ? state.eventLog : null;
+  if (runtimeEventLog) {
+    const durableEventLog = path.join(project.projectPath, '.vibecat', 'events.jsonl');
+    try { fs.mkdirSync(path.dirname(durableEventLog), { recursive: true }); fs.copyFileSync(runtimeEventLog, durableEventLog); preserved.eventLog = durableEventLog; } catch { /* best-effort preservation */ }
+  }
   removeState(project.projectPath); writeState(project.projectPath, preserved); removed.push('session token', 'PID ownership records');
   return { stopped, removed, idempotent: stopped.length === 0 };
 }

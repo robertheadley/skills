@@ -161,6 +161,8 @@ Handles are opaque and scoped to one project, browser session, and tab. `STALE_E
 
 The bridge relays every console line from the userscript — `debug`, `log`, `info`, `warn`, `error`, plus window errors and unhandled rejections — to the runtime event log. `vibecat events` reads that log with `--level` (comma-separated), `--hash <prefix>` (build correlation), and `--limit` filters. `vibecat status --json` shows `service.console_diagnostics.buffered_events` as a live count. If the script logs but the DOM does not change, read the events before touching selectors — the failure is usually visible in the log.
 
+`vibecat stop` preserves the session's events at `<project>/.vibecat/events.jsonl`, so `vibecat events` keeps working after the service ends (`evidence.live` is `false` for archived logs). The next `start` begins a fresh live log.
+
 Attributes are allowlisted. Passwords, hidden secret fields, token-like names and values, authorization material, API-key patterns, and credit-card-like values are redacted. Cookies and browser storage are not inspected. Unrelated tabs are never addressable.
 
 ## Selector, Mutation, and Screenshot Workflow

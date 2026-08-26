@@ -298,7 +298,7 @@ async function execute(positionals, options) {
       return true;
     }).slice(-limit);
     const health = await getHealth(state);
-    return result('events', { state: status.lifecycle, projectPath: project.projectPath, events: filtered, count: filtered.length, total: events.length, evidence: { eventLog, exists: fs.existsSync(eventLog) }, console_diagnostics: health && health.console_diagnostics || null, nextActions: filtered.length ? [] : ['Add console logging to the userscript; every relayed console line appears here.', 'Run `vibecat status --json` to confirm the bridge is connected.'] });
+    return result('events', { state: status.lifecycle, projectPath: project.projectPath, events: filtered, count: filtered.length, total: events.length, evidence: { eventLog, exists: fs.existsSync(eventLog), live: Boolean(health) }, console_diagnostics: health && health.console_diagnostics || null, nextActions: filtered.length ? [] : ['Add console logging to the userscript; every relayed console line appears here.', 'Run `vibecat status --json` to confirm the bridge is connected.'] });
   }
   if (command === 'bootstrap') {
     const plan = { fileChanges: [{ path: project.outputFile, action: project.outputFile === project.entryPoint ? 'validate' : 'build' }], processActions: [{ action: 'start-service', host: '127.0.0.1', port: project.port }], permissionSensitive: ['write build output', 'start loopback service'] };

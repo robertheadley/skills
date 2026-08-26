@@ -2,6 +2,27 @@
 
 All modifications made to the sync utility codebase by the AI agent.
 
+## [2.1.1] - 2026-08-25
+
+```yaml
+id: vibecat-2.1.1-events-survive-stop
+timestamp: 2026-08-25T00:00:00+00:00
+what: |
+  Fix: `vibecat stop` no longer destroys the runtime event log. Previously stopSession removed the entire runtime state directory (including browser-events.jsonl), so `vibecat events` returned nothing after a session ended — the relayed console data the events command exists to preserve. stop now copies the runtime log to `<project>/.vibecat/events.jsonl` before clearing state and records that durable path in the preserved STOPPED state; `vibecat events` reports `evidence.live` (false for archived logs) and keeps all filters working after stop. Added a regression test covering stop preservation.
+why: Live use showed events vanished the moment the service stopped; the verbose-logging debugging loop needs post-session read-back.
+components:
+  - src/services.js (stopSession event-log preservation)
+  - bin/vibecat.js (events evidence.live)
+  - tests/cli.test.js (stop-preservation regression test)
+  - README.md, skills/sync-scriptcat-userscripts/SKILL.md (archived-events note)
+  - package.json / package-lock.json (2.1.1)
+type: fix
+validation:
+  - npm run lint
+  - npm test
+  - npm run check
+```
+
 ## [2.1.0] - 2026-08-25
 
 ```yaml

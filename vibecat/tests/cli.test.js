@@ -81,6 +81,16 @@ test('events reads the runtime event log with level, hash, and limit filters', a
   assert.equal(hashed.json.count, 2);
   const limited = f.run(['events', '--project', f.directory, '--limit', '1', '--json']);
   assert.equal(limited.json.count, 1); assert.equal(limited.json.events[0].message, 'old build');
+  // Stopping must not destroy the event log: `vibecat events` keeps reading the
+  // durable copy preserved in the project's .vibecat/ directory.
+  assert.equal(f.run(['stop', '--project', f.directory, '--json']).status, 0);
+  const afterStop = f.run(['events', '--project', f.directory, '--json']);
+  assert.equal(afterStop.status, 0); assert.equal(afterStop.json.ok, true);
+  assert.equal(afterStop.json.count, 3); assert.equal(afterStop.json.total, 3); assert.equal(afterStop.json.evidence.exists, true);
+  assert.equal(afterStop.json.evidence.live, false);
+  assert.equal(afterStop.json.evidence.eventLog.startsWith(path.join(f.directory, '.vibecat')), true);
+  const staleErrors = f.run(['events', '--project', f.directory, '--level', 'error', '--json']);
+  assert.equal(staleErrors.json.count, 1); assert.equal(staleErrors.json.events[0].message, 'boom');
 });
 
 test('doctor distinguishes core readiness from optional browser readiness', async (t) => {

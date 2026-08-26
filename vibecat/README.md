@@ -353,6 +353,8 @@ vibecat events --project "<path>" --hash <sha256-prefix> --limit 20 --json
 
 Events include level, message, page URL, build hash, tab handle, and timestamp. `--level` filters by comma-separated levels, `--hash` correlates events with a specific build, and `--limit` caps the newest returned events. `vibecat status --json` reports `service.console_diagnostics.buffered_events` as a live count. This is the primary debugging channel: when a script logs but the DOM does not change, read the events before touching selectors.
 
+The log survives `vibecat stop`: stopping preserves the session's events at `<project>/.vibecat/events.jsonl`, so archived events stay readable after the service ends (`evidence.live` is `false` for archived logs; the next `start` begins a fresh live log).
+
 ## Selector Assistance
 
 ```text
