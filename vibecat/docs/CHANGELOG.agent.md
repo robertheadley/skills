@@ -2,6 +2,53 @@
 
 All modifications made to the sync utility codebase by the AI agent.
 
+## [2.2.0] - 2026-08-26
+
+```yaml
+id: vibecat-2.2.0-eval-call-matchstate
+timestamp: 2026-08-26T00:00:00+00:00
+what: |
+  Three capability additions driven by the Aug 2026 note review.
+
+  1. `vibecat eval --expr "<js>" [--timeout-ms <n>] [--file <path>]` runs a
+     userscript function in a browser-less node:vm sandbox (DOM/GM/location
+     stubs, network access disabled, init-template IIFE unwrapped) and returns
+     `{ result, type, calls, timeMs }`. This collapses the edit -> push ->
+     reload -> events loop for pure-function testing (search-URL construction,
+     NZB/query generation, date formatting) to a single sub-second command.
+     Sandbox errors are typed (METADATA_INVALID, EVAL_BOOT_FAILED, EVAL_FAILED,
+     EVAL_TIMEOUT, EVAL_NETWORK_DISABLED).
+
+  2. `vibecat call --fn <name> [--args <json>]` invokes an opt-in user-visible
+     function on the LIVE page and returns its result. Scripts must explicitly
+     register with `window.__vibecatExpose = (name, fn) => { ... }`; only
+     registered functions are callable. --args accepts a JSON array (spread
+     positionally) or a single JSON object (passed as one argument). New bridge
+     operation `callExposed`; typed error EXPOSED_FUNCTION_NOT_FOUND.
+
+  3. `match_state` diagnostics: browser URL vs `@match` patterns resolved to
+     `matched` / `mismatched` / `no_patterns` / `no_tab`. `vibecat status`
+     reports `browser.match_state`; the `BROWSER_EXECUTION_NOT_ACKNOWLEDGED`
+     push error now includes match_state and tailored next actions, so agents
+     can tell "tab on the wrong URL" from "no tab" from "bridge crashed."
+why: The PornPics/TPDB session showed a 15-30s round trip per pure-function
+  iteration and an un-disambiguatable BROWSER_EXECUTION_NOT_ACKNOWLEDGED when
+  the user navigated away. eval/call slice iteration to <1s and match_state
+  names the delivery-failure cause.
+components:
+  - src/match.js (matchState/matchPatterns/globToRegExp)
+  - src/eval-sandbox.js (runEval, node:vm sandbox, call counter)
+  - src/browser-bridge.js (__vibecatExpose registry, callExposed op)
+  - bin/vibecat.js (eval + call commands, status match_state)
+  - src/services.js (BROWSER_EXECUTION_NOT_ACKNOWLEDGED includes match_state)
+  - tests/cli.test.js, tests/sync-server.test.js
+  - README.md, SKILL.md (root + nested), package.json / package-lock.json (2.2.0)
+type: feature
+validation:
+  - npm run lint
+  - npm test
+```
+
 ## [2.1.2] - 2026-08-25
 
 ```yaml

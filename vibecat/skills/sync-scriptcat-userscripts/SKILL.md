@@ -157,13 +157,30 @@ vibecat highlight <handle> --project "<path>" --json
 vibecat events --limit 50 --level error,warn --project "<path>" --json
 ```
 
-Handles are opaque and scoped to one project, browser session, and tab. `STALE_ELEMENT_HANDLE` means re-query the page. Inspection is read-only except the explicit temporary `highlight` overlay and screenshot rendering. There is no arbitrary expression evaluation.
+Handles are opaque and scoped to one project, browser session, and tab. `STALE_ELEMENT_HANDLE` means re-query the page. Inspection is read-only except the explicit temporary `highlight` overlay and screenshot rendering. There is no arbitrary expression evaluation on the live page — offline sandboxed eval (`vibecat eval`) and invocation of explicitly-registered functions (`vibecat call`) are the only evaluation paths, and neither evaluates arbitrary expressions in the page context.
 
 The bridge relays every console line from the userscript — `debug`, `log`, `info`, `warn`, `error`, plus window errors and unhandled rejections — to the runtime event log. `vibecat events` reads that log with `--level` (comma-separated), `--hash <prefix>` (build correlation), and `--limit` filters. `vibecat status --json` shows `service.console_diagnostics.buffered_events` as a live count. If the script logs but the DOM does not change, read the events before touching selectors — the failure is usually visible in the log.
 
 `vibecat stop` preserves the session's events at `<project>/.vibecat/events.jsonl`, so `vibecat events` keeps working after the service ends (`evidence.live` is `false` for archived logs). The next `start` begins a fresh live log.
 
 Attributes are allowlisted. Passwords, hidden secret fields, token-like names and values, authorization material, API-key patterns, and credit-card-like values are redacted. Cookies and browser storage are not inspected. Unrelated tabs are never addressable.
+
+## Sandboxed Eval and Live Call
+
+`vibecat eval --expr "<js>" [--timeout-ms <n>] [--file <path>] --json` runs a userscript function in a browser-less `node:vm` sandbox (DOM/GM/location stubs, network access disabled) and returns `{ result, type, calls, timeMs }`. Use it for pure-function work — search-URL construction, NZB/query generation, date/selector logic — before ever pushing and reloading. `calls` is how many userscript functions the expression invoked. Failures are typed (`METADATA_INVALID`, `EVAL_BOOT_FAILED`, `EVAL_FAILED`, `EVAL_TIMEOUT`); network attempts fail fast with `EVAL_NETWORK_DISABLED`.
+
+`vibecat call --fn "<name>" [--args <json>] --json` invokes a function the userscript registered on the live page and returns its result. Scripts opt in with `window.__vibecatExpose`:
+
+```js
+globalThis.__vibecatExpose = (name, fn) => { (globalThis.__vibecatExposed ||= {})[name] = fn; };
+__vibecatExpose('buildSceneQueries', (site, date, performers) => [/* ... */]);
+```
+
+`--args` is a JSON array (spread positionally, `foo(a, b)`) or a single JSON object (one argument, `foo({...})`). Only `__vibecatExpose`-registered functions are callable; anything else fails with `EXPOSED_FUNCTION_NOT_FOUND`. There is no unrestricted expression evaluation on the live page.
+
+## Match-State Diagnostics
+
+`status` reports `browser.match_state` (`matched` / `mismatched` / `no_patterns` / `no_tab`), resolving the connected tab's URL against the userscript `@match` patterns. A `BROWSER_EXECUTION_NOT_ACKNOWLEDGED` push failure includes `match_state` and tailored `nextActions`, so agents distinguish "the tab is on a URL outside `@match`" (`mismatched` → open the matched URL) from "no tab is connected" (`no_tab` → open/reload) from "the page hasn't run the updated build" (`matched` → reload, then retry).
 
 ## Selector, Mutation, and Screenshot Workflow
 

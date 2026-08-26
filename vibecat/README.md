@@ -30,6 +30,9 @@ VibeCat works through one stable `vibecat` CLI. Codex, Antigravity, Hermes, and 
 - Temporary element highlighting and page- or element-scoped PNG capture.
 - Relayed userscript console read-back with level, build-hash, and count filters (`vibecat events`).
 - Scaffolded in-page settings menu for keys and preferences (`vibecat init --settings`).
+- Browser-less sandboxed evaluation of userscript functions (`vibecat eval`) — static function validation without a page reload.
+- Opt-in live-page function invocation (`vibecat call`) for functions a userscript registers via `__vibecatExpose`.
+- URL `@match` diagnostics (`match_state`) surfaced in `status` and push failures to distinguish delivery problems from URL mismatches.
 - Password, token, API-key, authorization, and card-like value redaction.
 - Build, type, metadata, syntax, browser, selector, attribute, style, runtime-error, and stale-build validation.
 - Idempotent shutdown that stops only verified VibeCat-owned processes.
@@ -355,6 +358,39 @@ Events include level, message, page URL, build hash, tab handle, and timestamp. 
 
 The log survives `vibecat stop`: stopping preserves the session's events at `<project>/.vibecat/events.jsonl`, so archived events stay readable after the service ends (`evidence.live` is `false` for archived logs; the next `start` begins a fresh live log).
 
+## Sandboxed Function Evaluation
+
+`vibecat eval` runs a userscript function in a browser-less `node:vm` sandbox (DOM/GM/location stubs, network access disabled, init-template IIFE unwrapped) and returns the result. This collapses the edit → push → reload → `events` loop for pure-function work (search-URL construction, query generation, date/selector logic) to a single sub-second command:
+
+```text
+vibecat eval --project "<path>" --expr "buildSearchUrl(site, performers)" --json
+# → { "result": "https://...", "type": "string", "calls": 1, "timeMs": 3 }
+```
+
+Use `--timeout-ms <n>` to cap sandbox CPU time (default 3000) and `--file <path>` to evaluate a specific `.user.js` instead of the project build. `calls` reports how many userscript functions the expression invoked. Sandbox failures are typed (`METADATA_INVALID`, `EVAL_BOOT_FAILED`, `EVAL_FAILED`, `EVAL_TIMEOUT`); network attempts fail fast with `EVAL_NETWORK_DISABLED`. This is read-only and never touches the live page — push + reload to verify against the real DOM.
+
+## Live Function Invocation
+
+`vibecat call` invokes a function the userscript has **explicitly registered** on the live page and returns its result. A script opts in by exposing functions under `window.__vibecatExpose`:
+
+```js
+globalThis.__vibecatExpose = (name, fn) => { (globalThis.__vibecatExposed ||= {})[name] = fn; };
+__vibecatExpose('buildSceneQueries', (site, date, performers) => [/* ... */]);
+```
+
+Then invoke it without touching the page yourself:
+
+```text
+vibecat call --project "<path>" --fn "buildSceneQueries" --args '{"site":"brazzersexxtra","date":"2025-07-21","performers":["Emily Norman","Zac Wild"]}' --json
+vibecat call --project "<path>" --fn "run" --args '["Mature NL", ["Eileen"]]' --json
+```
+
+`--args` is a JSON array (spread as positional arguments) or a single JSON object (passed as one argument). Only functions the userscript registered under `__vibecatExpose` are callable; anything else fails with `EXPOSED_FUNCTION_NOT_FOUND`. This reveals query-ordering and runtime issues before the first external API call.
+
+## Match-State Diagnostics
+
+`match_state` resolves the connected tab's URL against the userscript `@match` patterns, distinguishing delivery failure causes. Values: `matched`, `mismatched`, `no_patterns`, `no_tab`. `vibecat status --json` reports `browser.match_state`, and a `BROWSER_EXECUTION_NOT_ACKNOWLEDGED` push failure includes it with tailored `nextActions` — so you can tell "the tab is on a URL outside the `@match` pattern" from "no tab is connected" from "the page hasn't run the updated build".
+
 ## Selector Assistance
 
 ```text
@@ -498,7 +534,7 @@ Legacy wrappers route through the shared application core where applicable. The 
 - Browser sessions require random per-service authentication.
 - Sessions and element handles are project- and tab-scoped.
 - Tokens are not printed in CLI output or health data.
-- Browser commands are named and bounded; arbitrary evaluation is unavailable.
+- Browser commands are named and bounded; arbitrary evaluation on the live page is unavailable (offline sandboxed `eval` and explicitly-registered `call` are the only evaluation paths).
 - Sensitive values are redacted and browser storage is not exposed.
 - Output and state writes are atomic.
 - Temporary directories require a VibeCat ownership marker before deletion.

@@ -93,6 +93,42 @@ test('events reads the runtime event log with level, hash, and limit filters', a
   assert.equal(staleErrors.json.count, 1); assert.equal(staleErrors.json.events[0].message, 'boom');
 });
 
+test('eval runs a userscript function in a sandbox without a browser', (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vibecat-cli-eval-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const run = (args) => { const child = spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8', timeout: 20000, windowsHide: true }); return { ...child, json: child.stdout.trim() ? JSON.parse(child.stdout) : null }; };
+  const script = `// ==UserScript==\n// @name Eval Test\n// @version 1.0.0\n// @match https://example.com/*\n// ==/UserScript==\n(function () {\n  'use strict';\n  function buildSearchUrl(site, performers) {\n    return 'https://www.pornpics.com/?q=' + [site.toLowerCase().replace(/\\s+/g, '-'), ...performers.map((p) => p.toLowerCase().replace(/\\s+/g, '-'))].join('+');\n  }\n})();\n`;
+  fs.writeFileSync(path.join(directory, 'eval-test.user.js'), script);
+  const evaled = run(['eval', '--project', directory, '--expr', "buildSearchUrl('Mature NL', ['Eileen', 'Conor Coxxx'])", '--json']);
+    assert.equal(evaled.status, 0); assert.equal(evaled.json.ok, true);
+  assert.equal(evaled.json.result, 'https://www.pornpics.com/?q=mature-nl+eileen+conor-coxxx');
+  assert.equal(typeof evaled.json.timeMs, 'number');
+  assert.equal(typeof evaled.json.calls, 'number');
+  const failed = run(['eval', '--project', directory, '--expr', 'missingFunction()', '--json']);
+  assert.equal(failed.status, 1); assert.equal(failed.json.errors[0].code, 'EVAL_FAILED');
+  const bootFailed = run(['eval', '--project', directory, '--expr', '1 + 1', '--file', path.join(directory, 'nonexistent.user.js'), '--json']);
+  assert.equal(bootFailed.status, 1);
+});
+
+test('parseCallArgs spreads arrays positionally and wraps a single JSON object', () => {
+  const { parseCallArgs } = require('../bin/vibecat');
+  assert.deepEqual(parseCallArgs(undefined), []);
+  assert.deepEqual(parseCallArgs('["Mature NL", ["Eileen"]]'), ['Mature NL', ['Eileen']]);
+  assert.deepEqual(parseCallArgs('{"site":"brazzersexxtra","performers":["Emily Norman"]}'), [{ site: 'brazzersexxtra', performers: ['Emily Norman'] }]);
+  assert.throws(() => parseCallArgs('{not json'), (error) => error.code === 'CALL_ARGS_INVALID');
+});
+
+test('matchState classifies live browser URLs against @match patterns', () => {
+  const { matchState, matchPatterns } = require('../src/match');
+  const patterns = matchPatterns(['https://duckduckgo.com/*', 'https://example.com/*'], 'https://fallback.example/*');
+  assert.equal(matchState('https://duckduckgo.com/?q=test', patterns), 'matched');
+  assert.equal(matchState('https://example.com/page', patterns), 'matched');
+  assert.equal(matchState('https://fallback.example/x', patterns), 'matched');
+  assert.equal(matchState('https://google.com/', patterns), 'mismatched');
+  assert.equal(matchState(null, patterns), 'no_tab');
+  assert.equal(matchState('https://example.com/', []), 'unknown');
+});
+
 test('doctor distinguishes core readiness from optional browser readiness', async (t) => {
   const f = await fixture(t); const run = f.run(['doctor', '--project', f.directory, '--json']); assert.equal(run.status, 0); assert.equal(run.json.coreReady, true); assert.equal(run.json.browserReady, false);
   assert.equal(run.json.checks.find((check) => check.name === 'browser-bridge').status, 'WARN'); assert.equal(run.json.nextActions.length > 0, true);

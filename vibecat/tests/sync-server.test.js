@@ -87,6 +87,17 @@ test('authenticated live browser bridge exposes bounded DOM operations and redac
   await assert.rejects(() => f.server.sendCommand('element', { handle: matches[0].handle }, 2000), (error) => error.code === 'STALE_ELEMENT_HANDLE');
 });
 
+test('callExposed invokes only functions the userscript explicitly exposed', async (t) => {
+  const f = await fixture(); t.after(() => f.close()); const extension = await connectExtension(f.server); t.after(() => extension.close());
+  fs.writeFileSync(f.filePath, userscript('3.0.0', '__vibecatExpose("buildSceneQueries", (site, performers) => performers.map((p) => site + "." + p.toLowerCase().replace(/\\s+/g, "-")));'));
+  const updatePromise = nextJson(extension, (message) => message.action === 'onchange'); await f.server.syncNow('call-test'); const update = await updatePromise;
+  const dom = await executeDelivered(f.server, update.data.script); t.after(() => dom.window.close());
+  const called = await f.server.sendCommand('callExposed', { name: 'buildSceneQueries', args: ['brazzersexxtra', ['Emily Norman', 'Zac Wild']] }, 2000);
+  assert.deepEqual(called.result, ['brazzersexxtra.emily-norman', 'brazzersexxtra.zac-wild']);
+  const missing = await f.server.sendCommand('callExposed', { name: 'nope', args: [] }, 2000).catch((error) => error);
+  assert.equal(missing.code, 'EXPOSED_FUNCTION_NOT_FOUND');
+});
+
 test('XPath, styles, rectangles, highlighting, mutations, and screenshots use named operations', async (t) => {
   const f = await fixture(); t.after(() => f.close()); const extension = await connectExtension(f.server); t.after(() => extension.close());
   const updatePromise = nextJson(extension, (message) => message.action === 'onchange'); await f.server.syncNow('inspection-test'); const update = await updatePromise;

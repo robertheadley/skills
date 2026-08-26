@@ -12,6 +12,7 @@ const { projectKey, detectEnvironment, normalizePath } = require('./paths');
 const { readState, writeState, removeState, listStates, stateDir } = require('./state');
 const { bundleProject, syntaxCheck, atomicWrite } = require('./build');
 const { extractMetadata } = require('./metadata');
+const { matchPatterns, matchState } = require('./match');
 const { requestJson } = require('./http-client');
 const { VibeCatError } = require('./errors');
 
@@ -198,7 +199,14 @@ async function pushProject(project, options = {}) {
   do { health = await getHealth(state); if (health && health.browser && health.browser.connected && health.browser.hash === delivery.hash) break; await new Promise((resolve) => setTimeout(resolve, 150)); } while (Date.now() < deadline);
   const acknowledged = Boolean(health && health.browser && health.browser.connected && health.browser.hash === delivery.hash);
   if (!delivery.sent) throw new VibeCatError('SCRIPTCAT_NOT_CONNECTED', 'No ScriptCat extension client acknowledged a live connection, so the bundle was not delivered.', { evidence: { delivery, browser: health && health.browser }, retryable: true, nextActions: ['Enable ScriptCat development synchronization for this VibeCat service.', 'Run `vibecat status --json` and retry.'] });
-  if (!acknowledged) throw new VibeCatError('BROWSER_EXECUTION_NOT_ACKNOWLEDGED', 'ScriptCat received the bundle, but no connected page executed the matching build before timeout.', { evidence: { delivery, browser: health && health.browser }, retryable: true, nextActions: ['Reload the intended page so ScriptCat executes the updated userscript.', 'Run `vibecat push --json` again.'] });
+  if (!acknowledged) {
+    let match_state = 'no_tab';
+    if (health && health.browser && health.browser.connected) {
+      try { match_state = matchState(health.browser.url, matchPatterns(extractMetadata(fs.readFileSync(project.entryPoint, 'utf8')).fields.match, project.config.browser && project.config.browser.urlPattern)); } catch { match_state = 'unknown'; }
+    }
+    const reason = match_state === 'mismatched' ? 'The connected tab is on a URL outside the userscript @match pattern.' : match_state === 'no_tab' ? 'No browser tab is connected.' : 'The connected tab has not executed the matching build.';
+    throw new VibeCatError('BROWSER_EXECUTION_NOT_ACKNOWLEDGED', `ScriptCat received the bundle, but page execution was not acknowledged: ${reason}`, { evidence: { delivery, browser: health && health.browser, match_state }, retryable: true, nextActions: match_state === 'mismatched' ? ['Open the matched URL in the synchronized browser, then run `vibecat push --json` again.'] : match_state === 'no_tab' ? ['Open (or reload) the matched URL so ScriptCat executes the updated userscript.', 'Run `vibecat push --json` again.'] : ['Reload the intended page so ScriptCat executes the updated userscript.', 'Run `vibecat push --json` again.'] });
+  }
   writeState(project.projectPath, { state: 'PUSHED', lastPush: { ...delivery, acknowledged: true, tabHandle: health.browser.tabHandle } });
   return { delivery, browser: health.browser, browserAcknowledged: true };
 }

@@ -13,6 +13,9 @@ const { asVibeCatError, VibeCatError } = require('../src/errors');
 const { normalizePath } = require('../src/paths');
 const { resolveProject } = require('../src/project');
 const { readState, writeState, stateDir } = require('../src/state');
+const { extractMetadata } = require('../src/metadata');
+const { runEval } = require('../src/eval-sandbox');
+const { matchPatterns, matchState } = require('../src/match');
 const {
   locateInstallation, resolveContext, statusProject, startSession, stopSession,
   commandBrowser, pushProject, runDoctor, bundleProject, getHealth,
@@ -25,11 +28,12 @@ Usage: vibecat <command> [options]
 Core:       help, version, locate, init, install, update, uninstall, doctor
 Lifecycle:  bootstrap, start, status, connect, stop
 Build:      build, watch, push, validate
-Inspect:    inspect page|landmarks|tree|element, query, query-xpath
+Inspect:    inspect page|landmarks|tree|element, query, query-xpath, events
 Element:    attributes, text, styles, rect, highlight
 Selectors:  selector suggest|test|compare
 Mutations:  mutations start|read|clear|stop
 Capture:    screenshot
+Sandbox:    eval (run a userscript function without a browser), call (invoke an exposed function on the live page)
 
 Common options:
   --project <absolute-path>  Target userscript project
@@ -39,6 +43,10 @@ Common options:
   --match <url-pattern>      Init scaffold @match (init)
   --name <display-name>      Init scaffold @name (init)
   --settings                 Scaffold an in-page settings menu with GM.getValue/GM.setValue grants (init)
+  --expr <javascript>        Expression to evaluate in the sandbox (eval)
+  --fn <name>                Exposed userscript function to invoke on the live page (call)
+  --args <json>              JSON array of arguments for --fn (call)
+  --timeout-ms <n>           Eval sandbox timeout in milliseconds (default 3000)
   --limit <n>                Cap returned events or query results
   --level <levels>           Events level filter, comma-separated (debug,log,info,warn,error,unhandledrejection)
   --hash <prefix>            Events filter by build-hash prefix
@@ -130,7 +138,7 @@ function human(output) {
   if (output.projectPath) lines.push(`Project: ${output.projectPath}`);
   if (output.entryPoint) lines.push(`Entry: ${output.entryPoint}`);
   if (output.outputFile) lines.push(`Output: ${output.outputFile}`);
-  if (output.browser) lines.push(`Browser: ${output.browser.connected ? 'CONNECTED' : 'DISCONNECTED'}`);
+  if (output.browser) lines.push(`Browser: ${output.browser.connected ? 'CONNECTED' : 'DISCONNECTED'}${output.browser.match_state ? ` (${output.browser.match_state})` : ''}`);
   for (const event of output.events || []) {
     const at = event.timestamp ? ` ${String(event.timestamp).slice(11, 19)}` : '';
     const detail = String(event.message || JSON.stringify(event)).replace(/\s+/g, ' ').trim();
@@ -275,7 +283,28 @@ async function execute(positionals, options) {
     const doctor = await runDoctor(project); return result('doctor', { ok: doctor.coreReady, state: doctor.coreReady ? 'READY' : 'ERROR', projectPath: project.projectPath, ...doctor, nextActions: doctor.coreReady ? doctor.browserReady ? ['Run `vibecat inspect landmarks --json`.'] : ['Run `vibecat bootstrap --project <path> --plan --json`.'] : ['Resolve every FAIL check and rerun `vibecat doctor --json`.'] });
   }
   if (command === 'status') {
-    const status = await statusProject(project); return result('status', { state: status.lifecycle, projectPath: project.projectPath, sessionId: status.state && status.state.sessionId, browser: status.health && status.health.browser || { connected: false }, build: status.state && status.state.lastBuild || { status: 'idle', entryPoint: project.entryPoint, outputFile: project.outputFile }, service: status.health, warnings: status.warnings, nextActions: status.lifecycle === 'CONNECTED' || status.lifecycle === 'WATCHING' ? ['Run `vibecat inspect landmarks --json`.'] : status.lifecycle === 'RUNNING' ? ['Load or reload the userscript in the intended browser tab.'] : ['Run `vibecat start --json`.'] });
+    const status = await statusProject(project);
+    const browser = status.health && status.health.browser || { connected: false };
+    if (browser.connected) {
+      let patterns = [];
+      try { patterns = matchPatterns(extractMetadata(fs.readFileSync(project.entryPoint, 'utf8')).fields.match, project.config.browser && project.config.browser.urlPattern); } catch { /* entry unreadable */ }
+      browser.match_state = matchState(browser.url, patterns);
+    } else browser.match_state = 'no_tab';
+    return result('status', { state: status.lifecycle, projectPath: project.projectPath, sessionId: status.state && status.state.sessionId, browser, build: status.state && status.state.lastBuild || { status: 'idle', entryPoint: project.entryPoint, outputFile: project.outputFile }, service: status.health, warnings: status.warnings, nextActions: status.lifecycle === 'CONNECTED' || status.lifecycle === 'WATCHING' ? ['Run `vibecat inspect landmarks --json`.'] : status.lifecycle === 'RUNNING' ? ['Load or reload the userscript in the intended browser tab.'] : ['Run `vibecat start --json`.'] });
+  }
+  if (command === 'eval') {
+    if (!options.expr) throw new VibeCatError('EVAL_EXPR_REQUIRED', 'Pass an expression with --expr "<javascript>".', { retryable: false, nextActions: ['Example: vibecat eval --project <path> --expr "buildSearchUrl(site, performers)" --json'] });
+    const file = fs.existsSync(project.outputFile) ? project.outputFile : project.entryPoint;
+    if (!fs.existsSync(file)) throw new VibeCatError('BUNDLE_MISSING', `No evaluable userscript exists at ${file}.`, { retryable: true, nextActions: ['Run `vibecat build --json` first, or pass `--file <path>.user.js`.'] });
+    const timeoutMs = Math.min(Math.max(Number(options['timeout-ms'] || 3000), 100), 30000);
+    const evaluated = await runEval({ source: fs.readFileSync(file, 'utf8'), expr: String(options.expr), timeoutMs });
+    return result('eval', { state: 'READY', projectPath: project.projectPath, entryPoint: file, ...evaluated, nextActions: ['Iterate on the expression; when the function is correct, push and verify on the real page.'] });
+  }
+  if (command === 'call') {
+    if (!options.fn) throw new VibeCatError('CALL_FN_REQUIRED', 'Pass a function name with --fn "<name>".', { retryable: false, nextActions: ['The userscript must register it first: __vibecatExpose("<name>", fn).'] });
+    const args = parseCallArgs(options.args);
+    const browserResult = await commandBrowser(project, 'callExposed', { name: String(options.fn), args }, 10000);
+    return result('call', { state: 'CONNECTED', projectPath: project.projectPath, browser: browserResult.health.browser, function: String(options.fn), result: browserResult.data.result, evidence: { live: true, capturedAt: new Date().toISOString() }, nextActions: ['Iterate on the function or run `vibecat validate --browser --json`.'] });
   }
   if (command === 'events') {
     const state = readState(project.projectPath);
@@ -424,4 +453,16 @@ async function main(argv = process.argv.slice(2)) {
 }
 
 if (require.main === module) main().then((code) => { process.exitCode = code; });
-module.exports = { main, parseArgs, execute };
+
+// Normalize `vibecat call --args <json>` into a positional argument array. A
+// JSON array is spread as positional args (foo(a, b)); any other JSON value
+// (typically an object) is passed as a single argument (foo({...})).
+function parseCallArgs(raw) {
+  if (raw === undefined || raw === null) return [];
+  let parsed;
+  try { parsed = JSON.parse(String(raw)); }
+  catch { throw new VibeCatError('CALL_ARGS_INVALID', '--args must be valid JSON.', { retryable: false, nextActions: ['Example: --args \'{"site":"brazzersexxtra","performers":["Emily Norman"]}\' (a single object) or --args \'["Mature NL", ["Eileen"]]\' (an array spread positionally).'] }); }
+  return Array.isArray(parsed) ? parsed : [parsed];
+}
+
+module.exports = { main, parseArgs, execute, parseCallArgs };

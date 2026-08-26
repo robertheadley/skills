@@ -17,6 +17,37 @@ function browserBridgeRuntime(config) {
   const sessionNonce = Math.random().toString(36).slice(2);
   const SECRET_NAME = /pass(word)?|token|secret|authorization|api[-_]?key|credit|card|cvv|session/i;
   const SECRET_VALUE = /(?:bearer\s+[a-z0-9._-]+|sk-[a-z0-9_-]{12,}|\b(?:\d[ -]*?){13,19}\b)/i;
+  const exposedFunctions = {};
+  // Opt-in live-page function invocation: a userscript registers callable
+  // functions with __vibecatExpose(name, fn); `vibecat call` invokes only
+  // registered names. This is NOT arbitrary expression evaluation.
+  globalThis.__vibecatExpose = (name, fn) => {
+    if (name && typeof fn === 'function') exposedFunctions[name] = fn;
+    return Boolean(name && typeof fn === 'function');
+  };
+  globalThis.__vibecatExposed = exposedFunctions;
+  function serializeResult(value) {
+    const seen = new WeakSet();
+    try {
+      return JSON.parse(JSON.stringify(value, (key, item) => {
+        if (typeof item === 'bigint') return `${item}n`;
+        if (typeof item === 'function') return '[Function]';
+        if (typeof item === 'symbol') return String(item);
+        if (item instanceof Error) return `[Error: ${item.message}]`;
+        if (item instanceof Date) return item.toISOString();
+        if (item instanceof Map) return Object.fromEntries(item);
+        if (item instanceof Set) return [...item];
+        if (item === undefined) return null;
+        if (typeof item === 'object' && item !== null) {
+          if (seen.has(item)) return '[Circular]';
+          seen.add(item);
+        }
+        return item;
+      }));
+    } catch {
+      return { __vibecat: 'unserializable', type: typeof value };
+    }
+  }
 
   function text(value, limit = MAX_TEXT) {
     const normalized = String(value == null ? '' : value).replace(/\s+/g, ' ').trim();
@@ -187,6 +218,16 @@ function browserBridgeRuntime(config) {
       case 'mutationsClear': mutations.splice(0); return { active: Boolean(mutationObserver), cleared: true };
       case 'mutationsStop': if (mutationObserver) mutationObserver.disconnect(); mutationObserver = null; return { active: false, retained: mutations.length };
       case 'screenshot': return screenshot(args && args.handle ? resolveHandle(args.handle) : null);
+      case 'callExposed': {
+        const fn = exposedFunctions[args.name];
+        if (typeof fn !== 'function') {
+          const error = new Error(`No exposed function named "${args.name}". Register it inside the userscript with __vibecatExpose('${args.name}', fn).`);
+          /** @type {any} */ (error).code = 'EXPOSED_FUNCTION_NOT_FOUND';
+          throw error;
+        }
+        const result = await fn.apply(null, Array.isArray(args.args) ? args.args : []);
+        return { name: args.name, result: serializeResult(result) };
+      }
       case 'reload': { location.reload(); return { reloading: true }; }
       case 'notify': {
         const toast = document.createElement('div');

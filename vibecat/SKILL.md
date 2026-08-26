@@ -18,6 +18,9 @@ The user should never have to explain what vibecat can do. If a task is on this 
 | Build & deliver | `build`, `watch --push --reload` (save → rebuild → deliver → page auto-refreshes itself), `push` (proves exact-hash browser execution), `validate --browser` |
 | Live DOM | `inspect page/landmarks/tree/element`, `query "<css>"`, `query-xpath`, `attributes`, `text`, `styles`, `rect`, `highlight` — read the REAL page through the bridge, including logged-in and adult-gated pages |
 | Console read-back | `events --level <lvl> --hash <prefix> --limit <n> --json` — every console line from the userscript is relayed and readable; `status` shows `console_diagnostics.buffered_events` |
+| Sandbox eval | `eval --expr "<js>" [--timeout-ms <n>] [--file <path>] --json` — run a userscript function in a browser-less `node:vm` sandbox (DOM/GM/location stubs, network off) and get `{ result, type, calls, timeMs }`; ideal for search-URL/NZB-query/date logic before touching the real page |
+| Live call | `call --fn "<name>" [--args <json>] --json` — invoke a function the userscript registered under `window.__vibecatExpose` on the live page and return its result; `--args` is an array (spread positionally) or a single object (one arg) |
+| Match diagnostics | `status` reports `browser.match_state` (`matched`/`mismatched`/`no_patterns`/`no_tab`); `BROWSER_EXECUTION_NOT_ACKNOWLEDGED` push failures include it with tailored `nextActions` so you can tell wrong-URL from no-tab from stale-build |
 | Selectors | `selector suggest <handle>`, `selector test "<css>"`, `selector compare <a> <b>` |
 | Mutations | `mutations start/read/clear/stop` — observe dynamic pages |
 | Capture | `screenshot --output "<abs.png>"` (may fail on tainted canvases — fall back to `query`/`text`/`rect`) |
@@ -37,6 +40,8 @@ The user should never have to explain what vibecat can do. If a task is on this 
 10. `vibecat validate --project "<path>" --browser --json` — require `VALIDATED`
 11. `vibecat stop --project "<path>" --json` when finished
 
+For pure-function iteration (search-URL / NZB-query / date logic), skip the push-reload loop: `vibecat eval --project "<path>" --expr "buildSearchUrl('Mature NL', ['Eileen'])" --json` returns the result in <1s. To run a function the script registers via `window.__vibecatExpose` on the live page, use `vibecat call --project "<path>" --fn "<name>" --args '<json>' --json`.
+
 ## Rules — violating these stalled real sessions
 
 - **Never assume site structure.** Write selectors only from live bridge inspection. A selector that works on one page variant (e.g. a studio page) is not guaranteed on another (network page, scene page). When the user says "it doesn't work on page X", inspect THAT page through the bridge.
@@ -52,7 +57,7 @@ The user should never have to explain what vibecat can do. If a task is on this 
 
 - `SCRIPTCAT_NOT_CONNECTED` → enable ScriptCat development synchronization; `status.service.websocket_clients > 0` confirms it.
 - `BROWSER_NOT_CONNECTED` → load/reload the matched URL, then `connect --wait`.
-- `BROWSER_EXECUTION_NOT_ACKNOWLEDGED` → ScriptCat received the bundle but no page executed it → reload (or `--reload`) and retry.
+- `BROWSER_EXECUTION_NOT_ACKNOWLEDGED` → ScriptCat received the bundle but no page executed it. Check `browser.match_state`: `mismatched` → the tab is on a URL outside `@match` (open the matched URL); `no_tab` → no tab is connected (open/reload); `matched` → the page is on the right URL but hasn't run the updated build (reload or `--reload`, then retry).
 - Page CSP blocks the bridge (`connect-src` violations) → scripts scaffolded by `init` carry `@inject-into content` (isolated world, CSP-exempt); that is the fix for strict sites like duckduckgo.com.
 - `PORT_OCCUPIED` / duplicate instances → stop the conflicting project; `STALE_PID` → run `doctor`.
 - `STALE_ELEMENT_HANDLE` → re-query; `STALE_BUILD` → push + reload; `BROWSER_RUNTIME_ERROR` → read `events` for the exact-hash failure, fix, rebuild, push.
