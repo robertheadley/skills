@@ -1,4 +1,4 @@
 interface:
-  display_name: "Sync ScriptCat Userscripts"
-  short_description: "Sync and debug ScriptCat userscripts locally"
-  default_prompt: "Use $sync-scriptcat-userscripts to start the local sync server, update my userscript, and monitor its live console."
+  display_name: "Sync ScriptCat Userscripts (VibeCat)"
+  short_description: "Develop and debug ScriptCat userscripts entirely through the vibecat CLI: scaffold, push, auto-reload, live-DOM inspect, relayed console read-back, and browser validation."
+  default_prompt: "Use $sync-scriptcat-userscripts (the vibecat CLI) for ALL userscript work: `vibecat locate --json`, scaffold with `vibecat init --project <abs-path> --match <url-pattern> [--settings] --json`, `vibecat doctor`, `vibecat start --reload`, `vibecat push`, `vibecat connect --wait`, then write selectors ONLY from live bridge data (`vibecat inspect landmarks`, `vibecat query`) and debug via `vibecat events`. Never assume site structure, never ask the user to reload pages or paste console output, keep the verbose log() helper, and put keys in the in-page settings menu from `init --settings`."

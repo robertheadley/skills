@@ -2,6 +2,24 @@
 
 All modifications made to the sync utility codebase by the AI agent.
 
+## [2.1.2] - 2026-08-25
+
+```yaml
+id: vibecat-2.1.2-self-sufficient-entrypoint
+timestamp: 2026-08-25T00:00:00+00:00
+what: |
+  Made the skill self-sufficient so clients never need the user to explain what VibeCat can do. The root SKILL.md was a thin pointer to the nested contract; it is now a complete capability document: a capability table covering init/--settings, lifecycle, build & deliver, live DOM inspection, console read-back (events), selectors, mutations, screenshots, and validation; the 11-step default workflow; the session-learned rules (never assume site structure, never ask the user to act, logged-in pages work through the bridge, verbose logging, settings menus, batch calls, project/repo separation); and recovery essentials. The agents/openai.yaml descriptor now carries a capability-rich short_description and default_prompt instead of a generic stub.
+why: Live sessions showed agents repeatedly discovering capabilities only after the user pointed them out ("you have access to those tools", "it should be able to do that", "the point of vibecat is to avoid manual installation"). Clients that load the skill must know the full surface up front.
+components:
+  - SKILL.md (self-sufficient root entrypoint)
+  - skills/sync-scriptcat-userscripts/agents/openai.yaml (capability-rich descriptor)
+  - package.json / package-lock.json (2.1.2)
+type: docs
+validation:
+  - npm run lint
+  - npm test
+```
+
 ## [2.1.1] - 2026-08-25
 
 ```yaml
