@@ -28,6 +28,8 @@ VibeCat works through one stable `vibecat` CLI. Codex, Antigravity, Hermes, and 
 - Selector suggestion, testing, comparison, stability estimates, and language-dependence warnings.
 - Bounded mutation observation for dynamic applications.
 - Temporary element highlighting and page- or element-scoped PNG capture.
+- Relayed userscript console read-back with level, build-hash, and count filters (`vibecat events`).
+- Scaffolded in-page settings menu for keys and preferences (`vibecat init --settings`).
 - Password, token, API-key, authorization, and card-like value redaction.
 - Build, type, metadata, syntax, browser, selector, attribute, style, runtime-error, and stale-build validation.
 - Idempotent shutdown that stops only verified VibeCat-owned processes.
@@ -72,16 +74,20 @@ Use an absolute userscript project path:
 
 ```powershell
 vibecat locate --json
+vibecat init --project "C:\absolute\userscript-project" --match "https://site.example/*" --json
 vibecat doctor --project "C:\absolute\userscript-project" --json
 vibecat bootstrap --project "C:\absolute\userscript-project" --plan --json
 vibecat bootstrap --project "C:\absolute\userscript-project" --execute --json
 vibecat status --project "C:\absolute\userscript-project" --json
 vibecat connect --project "C:\absolute\userscript-project" --json
 vibecat inspect landmarks --project "C:\absolute\userscript-project" --json
+vibecat events --project "C:\absolute\userscript-project" --limit 20 --json
 vibecat watch --project "C:\absolute\userscript-project" --push --json
 vibecat validate --project "C:\absolute\userscript-project" --browser --json
 vibecat stop --project "C:\absolute\userscript-project" --json
 ```
+
+`init` scaffolds a base userscript (with `@inject-into content` so strict-CSP sites can reach the bridge, and a tagged verbose `log()` helper whose output `vibecat events` reads back). Scripts that need API keys or preferences scaffold an in-page settings menu with `vibecat init --settings --project "C:\absolute\userscript-project" --match "https://site.example/*" --json` — the user enters values through the menu, never by editing the script.
 
 Bootstrap plan mode is read-only. It reports intended file changes, process actions, and permission-sensitive work. Execute mode resolves the project, builds valid output, starts the local service, and returns the next browser action. It never claims a browser connection without browser acknowledgement.
 
@@ -334,6 +340,18 @@ vibecat highlight <handle> --project "<path>" --json
 ```
 
 Handles are opaque and scoped to a project, browser session, and tab. DOM replacement or removal produces `STALE_ELEMENT_HANDLE`; re-query to obtain a current handle. Inspection allowlists attributes and truncates text. Passwords and secret-looking values are redacted.
+
+### Relayed Console Events
+
+The bridge relays every console line from the userscript — `debug`, `log`, `info`, `warn`, `error`, plus window errors and unhandled rejections — to the runtime event log:
+
+```text
+vibecat events --project "<path>" --json
+vibecat events --project "<path>" --level error,warn --limit 100 --json
+vibecat events --project "<path>" --hash <sha256-prefix> --limit 20 --json
+```
+
+Events include level, message, page URL, build hash, tab handle, and timestamp. `--level` filters by comma-separated levels, `--hash` correlates events with a specific build, and `--limit` caps the newest returned events. `vibecat status --json` reports `service.console_diagnostics.buffered_events` as a live count. This is the primary debugging channel: when a script logs but the DOM does not change, read the events before touching selectors.
 
 ## Selector Assistance
 

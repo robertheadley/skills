@@ -39,8 +39,48 @@ test('init scaffolds a base userscript and refuses to overwrite', (t) => {
   assert.equal(content.includes('@match        https://www.reddit.com/*'), true);
   assert.equal(content.includes('@name         Reddit Clean'), true);
   assert.equal(content.includes('@inject-into  content'), true);
+  assert.equal(content.includes("document.documentElement.dataset.vibecatReady = 'ready'"), true);
+  assert.equal(content.includes('function log(...args)'), true);
   const second = run(['init', '--project', directory, '--name', 'Reddit Clean', '--json']);
   assert.equal(second.status, 1); assert.equal(JSON.parse(second.stdout).errors[0].code, 'INIT_TARGET_EXISTS');
+});
+
+test('init --settings scaffolds an in-page settings menu with GM grants', (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'vibecat-cli-init-settings-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const run = (args) => spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8', timeout: 20000, windowsHide: true });
+  const first = run(['init', '--project', directory, '--match', 'https://duckduckgo.com/*', '--name', 'DDG Key', '--settings', '--json']);
+  assert.equal(first.status, 0);
+  const output = JSON.parse(first.stdout);
+  assert.equal(output.settings, true);
+  const content = fs.readFileSync(path.join(directory, 'ddg-key.user.js'), 'utf8');
+  assert.equal(content.includes('@grant        GM.getValue'), true);
+  assert.equal(content.includes('@grant        GM.setValue'), true);
+  assert.equal(content.includes('function settingsDialog()'), true);
+  assert.equal(content.includes('async function loadSettings()'), true);
+});
+
+test('events reads the runtime event log with level, hash, and limit filters', async (t) => {
+  const f = await fixture(t);
+  assert.equal(f.run(['bootstrap', '--project', f.directory, '--execute', '--json']).status, 0);
+  const empty = f.run(['events', '--project', f.directory, '--json']);
+  assert.equal(empty.status, 0); assert.equal(empty.json.ok, true); assert.equal(empty.json.count, 0);
+  const eventLog = empty.json.evidence.eventLog; assert.equal(typeof eventLog, 'string'); assert.equal(empty.json.evidence.exists, false);
+  const hash = 'a'.repeat(64);
+  fs.writeFileSync(eventLog, [
+    JSON.stringify({ level: 'info', message: 'init ready at https://example.com/', hash, timestamp: '2026-08-25T00:00:00.000Z' }),
+    JSON.stringify({ level: 'error', message: 'boom', hash, timestamp: '2026-08-25T00:00:01.000Z' }),
+    JSON.stringify({ level: 'warn', message: 'old build', hash: 'b'.repeat(64), timestamp: '2026-08-25T00:00:02.000Z' }),
+    'not-json\n',
+  ].join('\n'));
+  const all = f.run(['events', '--project', f.directory, '--json']);
+  assert.equal(all.status, 0); assert.equal(all.json.count, 3); assert.equal(all.json.total, 3); assert.equal(all.json.evidence.exists, true);
+  const errors = f.run(['events', '--project', f.directory, '--level', 'error', '--json']);
+  assert.equal(errors.json.count, 1); assert.equal(errors.json.events[0].message, 'boom');
+  const hashed = f.run(['events', '--project', f.directory, '--hash', 'a'.repeat(8), '--json']);
+  assert.equal(hashed.json.count, 2);
+  const limited = f.run(['events', '--project', f.directory, '--limit', '1', '--json']);
+  assert.equal(limited.json.count, 1); assert.equal(limited.json.events[0].message, 'old build');
 });
 
 test('doctor distinguishes core readiness from optional browser readiness', async (t) => {

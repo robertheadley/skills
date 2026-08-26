@@ -22,6 +22,7 @@ vibecat start --project "<absolute-project-path>" --reload --json
 vibecat push --project "<absolute-project-path>" --json
 vibecat connect --wait --project "<absolute-project-path>" --json
 vibecat inspect landmarks --project "<absolute-project-path>" --json
+vibecat events --project "<absolute-project-path>" --limit 20 --json
 ```
 
-Use returned JSON and canonical paths as the source of truth. Inspect the live page through the injected bridge (`inspect landmarks`, `query`, `screenshot`) before writing selectors — the agent's external browser tools are a fallback, not the default. Require exact-hash browser acknowledgement for push success, require `VALIDATED` when browser validation is configured, and finish with `vibecat stop --project "<canonical-projectPath>" --json`.
+Use returned JSON and canonical paths as the source of truth. Inspect the live page through the injected bridge (`inspect landmarks`, `query`, `events`, `screenshot`) before writing selectors — the agent's external browser tools are a fallback, not the default, and the bridge also reaches logged-in pages because it runs in the user's browser session. Never assume site structure: verify every selector against the inspected DOM of the exact page variant being targeted. Keys and preferences are entered by the user through an in-page settings menu (scaffold with `vibecat init --settings`). Require exact-hash browser acknowledgement for push success, require `VALIDATED` when browser validation is configured, and finish with `vibecat stop --project "<canonical-projectPath>" --json`.

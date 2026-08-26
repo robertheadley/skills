@@ -2,6 +2,32 @@
 
 All modifications made to the sync utility codebase by the AI agent.
 
+## [2.1.0] - 2026-08-25
+
+```yaml
+id: vibecat-2.1.0-session-patterns
+timestamp: 2026-08-25T00:00:00+00:00
+what: |
+  Session-pattern release derived from reviewing past live sessions (ThePornDB enhancer, DDG/HN/Reddit/Google cleaners, Facebook highlighter).
+  - Added `vibecat events`: reads the relayed userscript console/runtime event log with `--level`, `--hash`, and `--limit` filters (and human-mode rendering). The bridge already relayed every console line; the CLI had no read path, so agents could only see the buffered count and users ended up pasting console output into chat.
+  - Upgraded the `vibecat init` scaffold: the base script now carries a tagged verbose `log()` helper whose output `vibecat events` reads back, and sets `data-vibecat-ready` (the attribute the documented validation config asserts). Added `vibecat init --settings`, which scaffolds an in-page settings dialog backed by GM.getValue/GM.setValue so keys and preferences are entered through a menu on the page.
+  - Added a "Rules Learned from Live Sessions" section to the operating contract: never assume site structure (verify each page variant through the bridge), never guess when you can verify, logged-in pages work through the bridge because it runs in the user's authenticated browser, verbose logging is the default, never ask the user to act when the tool can, keys go in a settings menu, batch tool calls to avoid iteration limits, and userscript projects are standalone directories (VibeCat changes go to the vibecat repo).
+  - Reconciled the GitHub `robertheadley/skills` vibecat subtree (which still carried the legacy 1.2.0 sync-server layout) with the installed 2.x implementation, resolving the duplicate-installation confusion observed in the ThePornDB session.
+why: Review of past sessions showed recurring failure patterns: agents assumed site structure and guessed selectors; agents asked users to reload, run one-liners, change ScriptCat settings, and paste console logs; the "two versions installed" confusion came from the repo being six versions behind the installed CLI; and verbose logging was requested but had no read-back path.
+components:
+  - bin/vibecat.js (events command, init scaffold + --settings, help, human rendering)
+  - tests/cli.test.js (init scaffold, --settings, events filters)
+  - skills/sync-scriptcat-userscripts/SKILL.md (session rules, events command, recovery notes)
+  - SKILL.md (entrypoint quick start)
+  - README.md (events, init --settings, quick start)
+  - package.json / package-lock.json (2.1.0)
+type: feat
+validation:
+  - npm run lint
+  - npm test
+  - npm run check
+```
+
 ## [2.0.9] - 2026-08-06
 
 ```yaml

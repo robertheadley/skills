@@ -38,8 +38,77 @@ Common options:
   --wait-timeout <seconds>   Connect wait window (default 60)
   --match <url-pattern>      Init scaffold @match (init)
   --name <display-name>      Init scaffold @name (init)
+  --settings                 Scaffold an in-page settings menu with GM.getValue/GM.setValue grants (init)
+  --limit <n>                Cap returned events or query results
+  --level <levels>           Events level filter, comma-separated (debug,log,info,warn,error,unhandledrejection)
+  --hash <prefix>            Events filter by build-hash prefix
   --json                     Emit one JSON result on stdout
   --help                     Show help
+`;
+
+// Scaffold appended by `vibecat init --settings`: an in-page settings dialog
+// backed by GM.getValue/GM.setValue, so API keys and preferences are entered
+// through a menu on the page — never by editing the script or pasting into a
+// console. Extend SETTINGS_FIELDS with the fields the script needs.
+const INIT_SETTINGS_BODY = `  // Settings menu (scaffolded with --settings): add fields below, then read
+  // saved values with await loadSettings().
+  const SETTINGS_FIELDS = [
+    // { key: 'api_key', label: 'API Key', type: 'password' },
+  ];
+  function settingsDialog() {
+    const style = document.createElement('style');
+    style.textContent = [
+      '.vibecat-settings-btn{position:fixed;bottom:16px;right:16px;z-index:2147483647;width:40px;height:40px;border-radius:50%;border:1px solid rgba(0,0,0,.2);background:#111;color:#fff;font-size:20px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.35)}',
+      '.vibecat-settings{position:fixed;bottom:68px;right:16px;z-index:2147483647;background:#fff;color:#111;border:1px solid #ccc;border-radius:10px;padding:14px;font:13px/1.4 system-ui,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.25);min-width:260px;display:none}',
+      '.vibecat-settings.open{display:block}',
+      '.vibecat-settings label{display:block;margin:8px 0 2px;font-weight:600}',
+      '.vibecat-settings input{width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid #aaa;border-radius:6px;font:13px system-ui,sans-serif}',
+      '.vibecat-settings button{margin-top:10px;padding:6px 12px;border:0;border-radius:6px;background:#111;color:#fff;cursor:pointer}',
+    ].join(' ');
+    document.head.appendChild(style);
+    const button = document.createElement('button');
+    button.className = 'vibecat-settings-btn';
+    button.textContent = '\\u2699';
+    button.setAttribute('aria-label', 'Open userscript settings');
+    const panel = document.createElement('div');
+    panel.className = 'vibecat-settings';
+    button.addEventListener('click', () => {
+      if (panel.classList.contains('open')) { panel.classList.remove('open'); return; }
+      panel.innerHTML = '';
+      const title = document.createElement('div');
+      title.style.fontWeight = '700'; title.style.marginBottom = '6px';
+      title.textContent = 'Userscript settings';
+      panel.appendChild(title);
+      const inputs = {};
+      for (const field of SETTINGS_FIELDS) {
+        const label = document.createElement('label');
+        label.textContent = field.label;
+        const input = document.createElement('input');
+        input.type = field.type || 'text';
+        GM.getValue(field.key, '').then((value) => { input.value = value || ''; });
+        label.appendChild(input);
+        panel.appendChild(label);
+        inputs[field.key] = input;
+      }
+      const save = document.createElement('button');
+      save.textContent = 'Save';
+      save.addEventListener('click', async () => {
+        for (const field of SETTINGS_FIELDS) await GM.setValue(field.key, inputs[field.key].value);
+        panel.classList.remove('open');
+        log('settings saved');
+      });
+      panel.appendChild(save);
+      panel.classList.add('open');
+    });
+    document.documentElement.appendChild(button);
+    document.documentElement.appendChild(panel);
+  }
+  async function loadSettings() {
+    const settings = {};
+    for (const field of SETTINGS_FIELDS) settings[field.key] = await GM.getValue(field.key, '');
+    return settings;
+  }
+  settingsDialog();
 `;
 
 function parseArgs(argv) {
@@ -50,7 +119,7 @@ function parseArgs(argv) {
     const equal = value.indexOf('=');
     if (equal > 0) { options[value.slice(2, equal)] = value.slice(equal + 1); continue; }
     const name = value.slice(2);
-    if (index + 1 < argv.length && !argv[index + 1].startsWith('--') && !['json', 'plan', 'execute', 'force', 'typecheck', 'production', 'push', 'validate', 'browser', 'visible-only', 'minify', 'connect', 'reload', 'wait'].includes(name)) options[name] = argv[++index];
+    if (index + 1 < argv.length && !argv[index + 1].startsWith('--') && !['json', 'plan', 'execute', 'force', 'typecheck', 'production', 'push', 'validate', 'browser', 'visible-only', 'minify', 'connect', 'reload', 'wait', 'settings'].includes(name)) options[name] = argv[++index];
     else options[name] = true;
   }
   return { options, positionals };
@@ -62,6 +131,11 @@ function human(output) {
   if (output.entryPoint) lines.push(`Entry: ${output.entryPoint}`);
   if (output.outputFile) lines.push(`Output: ${output.outputFile}`);
   if (output.browser) lines.push(`Browser: ${output.browser.connected ? 'CONNECTED' : 'DISCONNECTED'}`);
+  for (const event of output.events || []) {
+    const at = event.timestamp ? ` ${String(event.timestamp).slice(11, 19)}` : '';
+    const detail = String(event.message || JSON.stringify(event)).replace(/\s+/g, ' ').trim();
+    lines.push(`  [${event.level || 'event'}${at}] ${detail.slice(0, 300)}`);
+  }
   for (const error of output.errors || []) lines.push(`Error ${error.code}: ${error.message}`);
   for (const action of output.nextActions || []) lines.push(`Next: ${action}`);
   return lines.join('\n');
@@ -189,9 +263,11 @@ async function execute(positionals, options) {
     const entry = path.join(target, `${slug}.user.js`);
     if (fs.existsSync(entry)) throw new VibeCatError('INIT_TARGET_EXISTS', `A userscript already exists at ${entry}.`, { evidence: { entry }, retryable: true, nextActions: ['Choose another project directory or remove the existing file.'] });
     fs.mkdirSync(target, { recursive: true });
-    const content = `// ==UserScript==\n// @name         ${name}\n// @namespace    vibecat.${slug}\n// @version      1.0.0\n// @description  ${name} — generated by vibecat init; refine with vibecat inspect.\n// @match        ${match}\n// @inject-into  content\n// @run-at       document-idle\n// ==/UserScript==\n\n(function () {\n  'use strict';\n  document.documentElement.dataset.vibecatInit = 'ready';\n})();\n`;
+    const settingsGrants = options.settings ? '\n// @grant        GM.getValue\n// @grant        GM.setValue' : '';
+    const settingsBody = options.settings ? INIT_SETTINGS_BODY : '';
+    const content = `// ==UserScript==\n// @name         ${name}\n// @namespace    vibecat.${slug}\n// @version      1.0.0\n// @description  ${name} — generated by vibecat init; refine with vibecat inspect.\n// @match        ${match}\n// @inject-into  content\n// @run-at       document-idle${settingsGrants}\n// ==/UserScript==\n\n(function () {\n  'use strict';\n  const SLUG = '${slug}';\n  // Verbose diagnostics: every log() line is relayed by the VibeCat bridge and\n  // readable with \`vibecat events --project <path> --json\`. Set VERBOSE=false\n  // to silence info-level noise; runtime errors always report.\n  const VERBOSE = true;\n  function log(...args) { if (VERBOSE) console.info('[' + SLUG + ']', ...args); }\n\n  document.documentElement.dataset.vibecatReady = 'ready';\n  document.documentElement.dataset.vibecatInit = 'ready';\n  log('init ready at', location.href);\n${settingsBody}})();\n`;
     fs.writeFileSync(entry, content);
-    return result('init', { state: 'INSTALLED', projectPath: target, entryPoint: entry, match, nextActions: ['Run `vibecat start --project <path> --reload --json`.', 'Run `vibecat push --project <path> --json` and open the matched URL.', 'Run `vibecat connect --wait --project <path> --json`, then `vibecat inspect landmarks --json`.'] });
+    return result('init', { state: 'INSTALLED', projectPath: target, entryPoint: entry, match, settings: Boolean(options.settings), nextActions: ['Run `vibecat start --project <path> --reload --json`.', 'Run `vibecat push --project <path> --json` and open the matched URL.', 'Run `vibecat connect --wait --project <path> --json`, then `vibecat inspect landmarks --json`.'] });
   }
 
   const project = projectFrom(options);
@@ -200,6 +276,29 @@ async function execute(positionals, options) {
   }
   if (command === 'status') {
     const status = await statusProject(project); return result('status', { state: status.lifecycle, projectPath: project.projectPath, sessionId: status.state && status.state.sessionId, browser: status.health && status.health.browser || { connected: false }, build: status.state && status.state.lastBuild || { status: 'idle', entryPoint: project.entryPoint, outputFile: project.outputFile }, service: status.health, warnings: status.warnings, nextActions: status.lifecycle === 'CONNECTED' || status.lifecycle === 'WATCHING' ? ['Run `vibecat inspect landmarks --json`.'] : status.lifecycle === 'RUNNING' ? ['Load or reload the userscript in the intended browser tab.'] : ['Run `vibecat start --json`.'] });
+  }
+  if (command === 'events') {
+    const state = readState(project.projectPath);
+    const status = await statusProject(project);
+    const eventLog = state && state.eventLog || path.join(project.projectPath, '.vibecat-runtime-events.jsonl');
+    const events = [];
+    if (fs.existsSync(eventLog)) {
+      for (const line of fs.readFileSync(eventLog, 'utf8').split(/\r?\n/)) {
+
+        if (!line.trim()) continue;
+        try { events.push(JSON.parse(line)); } catch { /* skip malformed lines */ }
+      }
+    }
+    const levels = options.level ? String(options.level).toLowerCase().split(',').map((item) => item.trim()).filter(Boolean) : null;
+    const hash = options.hash ? String(options.hash).toLowerCase() : null;
+    const limit = Math.min(Math.max(Number(options.limit || 50), 1), 500);
+    const filtered = events.filter((event) => {
+      if (levels && !levels.includes(String(event.level || '').toLowerCase())) return false;
+      if (hash && !String(event.hash || '').toLowerCase().startsWith(hash)) return false;
+      return true;
+    }).slice(-limit);
+    const health = await getHealth(state);
+    return result('events', { state: status.lifecycle, projectPath: project.projectPath, events: filtered, count: filtered.length, total: events.length, evidence: { eventLog, exists: fs.existsSync(eventLog) }, console_diagnostics: health && health.console_diagnostics || null, nextActions: filtered.length ? [] : ['Add console logging to the userscript; every relayed console line appears here.', 'Run `vibecat status --json` to confirm the bridge is connected.'] });
   }
   if (command === 'bootstrap') {
     const plan = { fileChanges: [{ path: project.outputFile, action: project.outputFile === project.entryPoint ? 'validate' : 'build' }], processActions: [{ action: 'start-service', host: '127.0.0.1', port: project.port }], permissionSensitive: ['write build output', 'start loopback service'] };

@@ -24,6 +24,19 @@ VibeCat debugs through its own injected bridge on the real page. The agent's ext
 
 Never search manually for this `SKILL.md` after `vibecat locate --json` succeeds. Never infer state from earlier prose; rerun `vibecat status --project "<path>" --json`.
 
+## Rules Learned from Live Sessions
+
+These rules exist because live userscript sessions (ThePornDB enhancer, DDG/HN/Reddit cleaners, Google cleaner) stalled or regressed when they were violated.
+
+- **Never assume site structure. Write selectors only from live bridge inspection.** A selector that works on one page variant (a studio page) is not guaranteed on another (a network page, an individual scene page). Inspect each variant with `vibecat inspect landmarks` / `vibecat query` before relying on its structure. When the user reports a page where the script "doesn't work", inspect THAT page through the bridge instead of re-reading source.
+- **Never guess when you can verify.** Every claim about the page — an element exists, a link points somewhere, a value is present — must come from `vibecat query` / `attributes` / `text` output or `vibecat events`, never from memory or assumption.
+- **Logged-in pages work through the bridge.** The bridge runs inside the user's real, authenticated browser session, so pages behind a login (or an adult-content gate) are inspectable exactly like public pages. Do not report a page as unreachable because it needs auth — connect and inspect it.
+- **Verbose logging is the default.** Keep the tagged `log()` helper from the init template in the script and read the relayed console with `vibecat events --project "<path>" --json` (filters: `--level`, `--hash`, `--limit`). Never ask the user to copy console output or open DevTools — the bridge relays every console line.
+- **Never ask the user to act when the tool can.** No "run this one-liner", no "change ScriptCat settings", no "paste this into the console". If the bridge cannot connect, the fix is scripted: `@inject-into content` is already scaffolded, push with `--reload`, or `connect --wait`.
+- **Keys and preferences go in an in-page settings menu.** Scaffold with `vibecat init --settings` (GM.getValue/GM.setValue plus a settings dialog). The user enters values through the menu; the script never hard-codes them and the agent never asks the user to edit the script.
+- **Batch tool calls; conserve iterations.** Combine independent CLI invocations into one agent turn — the canonical sequences below are designed to fit. If a loop hits tool-iteration limits it is over-inspecting; prefer one `inspect landmarks` plus targeted `query` calls over repeated tree dumps.
+- **Userscript projects are standalone directories.** They are not part of the VibeCat repository (`robertheadley/skills`, `vibecat/` subtree) and never belong in an unrelated repo. VibeCat changes go to the vibecat repo; userscript changes stay in the project directory.
+
 ## Success Contract
 
 - Installation success: `locate.ok=true`, state `INSTALLED`, selected installation `complete=true`.
@@ -141,9 +154,12 @@ vibecat text <handle> --limit 2000 --project "<path>" --json
 vibecat styles <handle> --project "<path>" --json
 vibecat rect <handle> --project "<path>" --json
 vibecat highlight <handle> --project "<path>" --json
+vibecat events --limit 50 --level error,warn --project "<path>" --json
 ```
 
 Handles are opaque and scoped to one project, browser session, and tab. `STALE_ELEMENT_HANDLE` means re-query the page. Inspection is read-only except the explicit temporary `highlight` overlay and screenshot rendering. There is no arbitrary expression evaluation.
+
+The bridge relays every console line from the userscript — `debug`, `log`, `info`, `warn`, `error`, plus window errors and unhandled rejections — to the runtime event log. `vibecat events` reads that log with `--level` (comma-separated), `--hash <prefix>` (build correlation), and `--limit` filters. `vibecat status --json` shows `service.console_diagnostics.buffered_events` as a live count. If the script logs but the DOM does not change, read the events before touching selectors — the failure is usually visible in the log.
 
 Attributes are allowlisted. Passwords, hidden secret fields, token-like names and values, authorization material, API-key patterns, and credit-card-like values are redacted. Cookies and browser storage are not inspected. Unrelated tabs are never addressable.
 
@@ -230,10 +246,13 @@ vibecat start --project "<absolute-project-path>" --reload --json
 vibecat push --project "<absolute-project-path>" --json
 vibecat connect --wait --project "<absolute-project-path>" --json
 vibecat inspect landmarks --project "<absolute-project-path>" --json
+vibecat events --project "<absolute-project-path>" --limit 20 --json
 vibecat watch --project "<absolute-project-path>" --push --reload --json
 vibecat validate --project "<absolute-project-path>" --browser --json
 vibecat stop --project "<absolute-project-path>" --json
 ```
+
+Scripts that need keys or preferences start with `vibecat init --settings --project "<path>" --match "<url-pattern>" --json` instead; the scaffolded dialog stores values through GM.setValue, and the script reads them with `await loadSettings()`.
 
 Inspection data comes from the injected bridge: `inspect landmarks`, `query`, `query-xpath`, `attributes`, `text`, `styles`, `rect`, `selector suggest`, and `screenshot` all read the real page in the synchronized browser. The agent's own browser tools are a fallback for offline or unbridgeable targets only, never the default source of DOM facts.
 
@@ -246,7 +265,7 @@ This avoids manual skill discovery, literal `/tmp`, shell-path reconstruction, c
 - `STALE_PID` or `PROCESS_OWNERSHIP_MISMATCH`: run `doctor`; never terminate an unverified PID.
 - `BUILD_FAILED` or `TYPECHECK_FAILED`: fix reported diagnostics; watch keeps the previous bundle and recovers on save.
 - `SCRIPTCAT_NOT_CONNECTED`: enable ScriptCat development synchronization, confirm `status.service.websocket_clients > 0`, retry.
-- `BROWSER_NOT_CONNECTED`: load/reload the intended tab after service startup, run `connect`, retry.
+- `BROWSER_NOT_CONNECTED`: load/reload the intended tab after service startup, run `connect`, retry. Auth-walled or gated pages are not special: the bridge runs in the user's logged-in browser session, so they connect and inspect like any other page once the tab is loaded.
 - `BROWSER_EXECUTION_NOT_ACKNOWLEDGED`: ScriptCat delivery occurred but page execution did not; reload and retry.
 - Page CSP blocks the bridge (console shows `violates the following Content Security Policy directive: "connect-src ..."`): the site's CSP forbids `ws://127.0.0.1` from the page world. Scripts scaffolded by `vibecat init` carry `@inject-into content` (ScriptCat's content-script/isolated world, where page CSPs do not apply) for this reason; for existing scripts, add that metadata line or switch the script to the manager's sandboxed world, then reload. Strict `connect-src` sites such as duckduckgo.com require this.
 - Screenshot fails with `Tainted canvases may not be exported`: cross-origin images without CORS headers taint the capture canvas; the page's DOM operations (`inspect`, `query`, `styles`, `rect`, `selector test`) remain fully usable, so prefer them for selector work on such pages.

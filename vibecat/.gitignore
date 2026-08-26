@@ -3,3 +3,5 @@ node_modules/
 mock-script.user.js
 *_dom_report.json
 .history/
+.vibecat/
+.vibecat-runtime-events.jsonl
