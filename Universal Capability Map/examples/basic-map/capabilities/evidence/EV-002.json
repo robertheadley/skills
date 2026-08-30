@@ -1,0 +1,1 @@
+{"uid": "EV-002", "capability_id": "auth-login", "kind": "review", "outcome": "pass", "scenario": "login-rejected", "locator": "PR #214 code review", "date": "2026-08-31", "notes": "Rejected invalid password without leaking user state."}

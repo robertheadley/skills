@@ -1,0 +1,124 @@
+# Example Universal Capability Map — a valid map exercising the full schema.
+#
+# States: unknown | not_implemented | partial | implemented | verified
+# Everything here is fictional; it demonstrates a desktop-style product
+# (authentication + a docking workspace) but the format is identical for
+# web apps, APIs, CLIs, libraries, games, plugins, internal tools, and
+# agent systems.
+capabilities:
+  - id: auth-login
+    name: Authentication
+    area: auth
+    claim: A user can sign in with valid credentials and is rejected on an invalid password.
+    description: Primary authentication flow for all user-facing surfaces.
+    status: verified
+    verified_by:
+      - PR-214
+      - release-1.4.0
+    aliases:
+      - sign-in
+      - log in
+    tags:
+      - auth
+      - security
+    sources:
+      - type: spec
+        locator: docs/product-spec.md#authentication
+      - type: issue
+        locator: "#482"
+    dimensions:
+      backend: verified
+      ui: verified
+      docs: implemented
+    evidence:
+      - EV-001
+      - EV-002
+    verification:
+      scenarios:
+        - id: login-success
+          description: Valid credentials are accepted and a session starts.
+        - id: login-rejected
+          description: An invalid password is rejected without leaking user state.
+
+  - id: auth-mfa
+    name: Multi-factor authentication
+    area: auth
+    claim: A user with MFA enabled must provide a second factor to complete sign-in.
+    status: implemented
+    depends_on:
+      - auth-login
+    aliases:
+      - two-factor
+      - 2fa
+    tags:
+      - auth
+      - security
+    sources:
+      - type: user_requirement
+        locator: customer-feedback-2026-q3
+    dimensions:
+      backend: implemented
+      api: implemented
+      ui: not_implemented
+    evidence:
+      - EV-003
+
+  - id: drag-drop
+    name: Drag and drop
+    area: workspace
+    claim: A user can drag a dockable panel and drop it onto a supported region.
+    status: implemented
+    tags:
+      - workspace
+      - interaction
+    sources:
+      - type: design
+        locator: docs/design/workspace.md
+    evidence:
+      - EV-004
+
+  - id: layout-state
+    name: Layout state persistence
+    area: workspace
+    claim: The workspace layout survives restart and restores the last arrangement.
+    status: implemented
+    sources:
+      - type: spec
+        locator: docs/product-spec.md#workspace-layout
+    evidence:
+      - EV-005
+
+  - id: panel-docking
+    name: Panel docking
+    area: workspace
+    claim: A user can dock any dockable panel to each supported docking region.
+    status: not_implemented
+    depends_on:
+      - drag-drop
+      - layout-state
+    blocked_by:
+      - layout-engine-rewrite
+    tags:
+      - workspace
+      - ui
+    sources:
+      - type: spec
+        locator: docs/product-spec.md#panel-docking
+
+  - id: layout-engine-rewrite
+    name: Layout engine rewrite
+    area: workspace
+    claim: The layout engine is rewritten to a constraint-based model.
+    status: not_implemented
+    sources:
+      - type: api_contract
+        locator: docs/contracts/layout-engine-v2.md
+
+  - id: theme-support
+    name: Theme support
+    area: presentation
+    claim: A user can switch between light and dark themes.
+    status: unknown
+    sources:
+      - type: issue
+        locator: "#601"

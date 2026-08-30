@@ -1,0 +1,1 @@
+{"uid": "EV-003", "capability_id": "auth-mfa", "kind": "command_result", "outcome": "pass", "locator": "scripts/verify_mfa.sh", "date": "2026-08-28", "notes": "Backend MFA verification runs green."}

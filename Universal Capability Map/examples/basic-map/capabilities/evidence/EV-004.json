@@ -1,0 +1,1 @@
+{"uid": "EV-004", "capability_id": "drag-drop", "kind": "command_result", "outcome": "pass", "locator": "scripts/smoke_drag_drop.sh", "date": "2026-08-27", "notes": "Drag/drop smoke script completes."}

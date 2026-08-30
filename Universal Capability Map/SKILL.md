@@ -1,116 +1,199 @@
 ---
-name: doofus-capability-map
-description: Use when creating or maintaining a Universal Capability Map.
-version: 1.0.0
+name: universal-capability-map
+description: Build and maintain an evidence-backed, machine-readable map of what a software product actually supports.
+version: 2.0.0
 author: Hermes Agent
 license: MIT
 metadata:
   hermes:
-    tags: [capabilities, product-map, evidence, verification, standalone]
+    tags: [capabilities, product-map, evidence, verification, planning, coding-agents]
     related_skills: [hermes-agent-skill-authoring]
 ---
 
-# Universal Capability Map (Doofus style)
+# Universal Capability Map
 
 ## When to Use
 
-- Starting work that needs a product-wide picture of what actually works —
-  create the map first, keep it current as you go.
-- After any completed change or release — update evidence and statuses so
-  the map reflects reality.
-- Auditing an existing map — run the checker and reconcile statuses with
-  evidence.
-- Don't use for task-level tracking (requirements/backlog) or for
-  implementation planning that doesn't need evidence-backed status.
+- Before planning or implementing — check what the product already
+  supports, so you build only the missing or broken portion.
+- After any completed change or release — update evidence and state so the
+  map keeps reflecting reality.
+- Before answering "does the product support X?" — answer from the map, not
+  from memory or source-code name matching.
+- When auditing a codebase or a claim — the map is the single source of
+  truth for what exists, and every status must be derivable from evidence.
+- The format is product-agnostic: desktop applications, web applications,
+  APIs, CLIs, libraries, games, plugins/extensions, internal tools, agent
+  systems, and other software products.
+
+Don't use it for: Jira-style task tracking, full requirements management,
+project-management frameworks, test-management platforms, or release
+management. The map answers one question and stays small:
+
+> What can this product actually do right now, and what evidence supports
+> that claim?
 
 ## What it is
 
-The Universal Capability Map is the product-wide answer to "what can this
-product actually do?". Requirements tell a task what it promised; the map
-tells the product what it delivers. It is:
+A lightweight, machine-readable, human-editable model of what a software
+product actually supports. Capabilities are stable, named claims about
+observable product behavior; evidence records prove (or disprove) each
+claim; the current state is derived from the active evidence rather than
+from vibes.
 
-- **Universal** — covers every capability in every area, including ones that
-  are not yet implemented. A gap on the map is a plan, not an omission.
-- **Evidence-backed** — a capability is never "implemented" because a
-  function with the right name exists. Status moves only through evidence.
-- **Persistent** — plain files committed with the project; the map survives
-  tasks, sessions, and releases.
-- **Strictly forward** — status is a lattice: `not_implemented` →
-  `implemented` → `verified`. Never demote silently; regression is recorded
-  as FAIL evidence and flagged, not hidden.
+Three conceptual layers keep the methodology adaptable without weakening
+its defaults:
 
-## The map is a UI checklist
+1. **Core format** — the interoperable data model: capabilities, states,
+   claims, evidence, dependencies, dimensions, scenarios, provenance.
+2. **Recommended policy** — strong defaults: stable IDs, evidence before
+   status claims, preserve history, explicit regressions, append rather
+   than rewrite evidence, verify user-visible behavior, keep the map
+   current with implementation changes.
+3. **Optional advanced features** — scenario coverage, source fingerprints,
+   commit-aware evidence, supersession, dimensions, dependency analysis.
+   Adopt them only when a project needs them.
 
-The most common failure mode this map exists to prevent: the core product
-works, then someone says "now give it a good UI" — and the UI is terrible,
-because its support functions were never enumerated, so the agent improvises
-UI plumbing mid-flight.
+## The state model
 
-Avoid it by making UI support functions first-class capabilities from the
-start. Every capability the interface needs goes on the map with evidence,
-just like the core:
+Each capability has exactly one state:
 
-- **State** — single source of truth, loading / error / empty states,
-  optimistic updates, undo-redo.
-- **Interaction** — forms + validation, keyboard navigation, drag-and-drop,
-  focus management, pagination / search / filter.
-- **Presentation** — theme tokens, responsive layout, density, typography,
-  iconography.
-- **Feedback** — toasts, progress indicators, skeletons, error boundaries.
-- **Accessibility** — ARIA, contrast, screen-reader flow, reduced motion.
-- **Data** — fetch / cache / refresh, offline behavior, staleness
-  indicators.
-
-Then the map reads like a build order. With the core `implemented` /
-`verified` and the UI capabilities `not_implemented` (or `ui: partial`
-dimensions), the `--report` gap list IS the UI checklist. Building the UI
-means executing those capabilities one at a time — each with its own
-evidence (component tests, visual review, manual interaction walkthrough)
-— instead of improvising on top of a finished core.
-
-A working product whose UI capabilities are all `not_implemented` is not
-"done, plus needs UI"; it is a product whose gap list happens to be the
-entire UI.
-
-## The promotion gate (hard rule)
-
-| target | requires |
+| state | meaning |
 | --- | --- |
-| `implemented` | ≥1 linked evidence with outcome `pass` |
-| `verified` | the above AND ≥1 **verification-level** evidence with outcome `pass` AND a `verified_by` note (task / PR / release that verified it) |
+| `unknown` | The capability exists in the map, but the repository has not been sufficiently inspected to determine implementation state. Lack of evidence is NOT proof of absence. |
+| `not_implemented` | The capability has been inspected or explicitly declared absent. No usable implementation exists. |
+| `partial` | Some meaningful portion exists, but the complete user-visible capability is not available. |
+| `implemented` | The capability exists and has valid implementation-level evidence. |
+| `verified` | The capability has current verification-level evidence demonstrating that it works as claimed. |
 
-`verified` is never earned by a bare file edit — only by verification-level
-evidence (`test_result`, `review`, `manual`). This is the same
-`implemented != tested != verified` invariant the evidence kinds encode.
+`deprecated: true` is independent of state — a capability can be
+`verified` and deprecated, or `not_implemented` and not deprecated.
 
-## Project layout (everything plain files)
+**State-change policy.** Status is not required to move only forward. The
+rule is:
 
-```
-capabilities.yaml                  # declaration + declared status
-capabilities/evidence/EV-001.json  # one evidence record per file
-```
+> Status must never be silently changed to hide history. Regressions and
+> demotions are allowed, but historical evidence remains intact and the
+> reason for the state change must be explicit.
 
-`capabilities.yaml`:
+A verified feature that later breaks becomes `partial`, `implemented`, or
+`not_implemented` — with its previous verification history preserved and a
+`regression:` (or `state_change_reason:`) note explaining the change. The
+checker rejects silent demotions and claims above what evidence supports.
+
+## Capabilities are claims
+
+A capability is a **testable product claim**, not a feature label or an
+implementation artifact. A good capability answers:
+
+> What observable thing can the product do?
 
 ```yaml
-capabilities:
-  - id: auth-login
-    name: Login
-    area: auth
-    description: Authenticated login flow
-    status: implemented            # declared; must equal what evidence derives
-    evidence: [EV-001]
-    verified_by: ""                # task/PR/release ref — required for verified
-    # dimensions (optional, informational):
-    dimensions:
-      backend: implemented
-      api: implemented
-      ui: partial
-      tests: implemented
-      docs: implemented
+- id: panel-docking
+  name: Panel Docking
+  area: workspace
+  claim: A user can dock any dockable panel to each supported docking region.
+  description: Optional longer explanation.
 ```
 
-`capabilities/evidence/EV-001.json`:
+`claim` is strongly recommended and preferred for new maps. Prefer claims
+about behavior ("a user can filter the list without reloading") over
+implementation descriptions ("uses a debounced search input"). If a
+capability cannot be phrased as an observable behavior, it is probably not
+a capability.
+
+## Dependencies
+
+```yaml
+depends_on:
+  - drag-drop
+  - layout-state
+  - docking-target-rendering
+blocked_by:            # optional
+  - layout-engine-rewrite
+```
+
+Dependencies are **planning and reasoning information**, never
+auto-promotion: the checker never marks a capability implemented merely
+because its dependencies are implemented. The checker validates that every
+referenced ID exists, rejects self-dependencies and obvious dependency
+cycles, and the report identifies:
+
+- dependencies per capability
+- missing dependency IDs
+- capabilities blocked by incomplete dependencies (a `depends_on` target
+  that is not `implemented`/`verified`, or anything in `blocked_by`)
+- high-impact dependencies used by many capabilities
+
+## Aliases and tags
+
+```yaml
+aliases:
+  - favorite models
+  - pinned models
+  - starred models
+tags:
+  - model-browser
+  - ui
+  - personalization
+```
+
+Aliases and tags exist for **discovery**: coding agents search aliases,
+tags, IDs, and claims for a requested behavior, so a request phrased
+"favorite models" still finds `model-favorites`. They reduce dependence on
+guessing the exact canonical ID. The checker validates that both are lists
+of non-empty strings.
+
+## Sources and evidence
+
+Two different things, kept deliberately separate:
+
+- **`sources`** — *why the capability exists*: provenance links back to the
+  spec, issue, task, user requirement, design, API contract, or release
+  that called for it.
+- **`evidence`** — *proof of current implementation or behavior*: what was
+  actually run, observed, or reviewed.
+
+```yaml
+sources:
+  - type: spec
+    locator: docs/product-spec.md#panel-docking
+  - type: issue
+    locator: "#482"
+```
+
+Allowed source types: `spec`, `issue`, `task`, `user_requirement`,
+`design`, `api_contract`, `release`, `other`. Sources are provenance
+records, not evidence; a spec reference never makes a capability
+implemented.
+
+## Dimensions
+
+Dimensions answer:
+
+> Where is this capability complete or incomplete?
+
+```yaml
+dimensions:
+  backend: implemented
+  api: implemented
+  ui: partial
+  tests: verified
+  docs: implemented
+required_dimensions:   # optional
+  - backend
+  - ui
+```
+
+Dimension states use the same vocabulary (`unknown`, `not_implemented`,
+`partial`, `implemented`, `verified`). The overall state is never
+automatically derived from dimensions; the agent declares the overall
+state explicitly. When `required_dimensions` is present, the checker warns
+if any required dimension is incomplete (not `implemented`/`verified`).
+
+## Evidence
+
+One evidence record per file under `capabilities/evidence/`:
 
 ```json
 {
@@ -118,176 +201,331 @@ capabilities:
   "capability_id": "auth-login",
   "kind": "test_result",
   "outcome": "pass",
-  "locator": "tests/test_auth.py",
-  "date": "2026-08-30"
+  "locator": "tests/test_auth.py::test_login",
+  "date": "2026-08-30",
+  "commit": "abc123",
+  "branch": "main",
+  "version": "1.4.0",
+  "notes": "Verified successful login and invalid-password rejection."
 }
 ```
 
-Evidence kinds and their level: `file_change`, `command_result`,
-`diagnostic` → **implementation**; `test_result`, `review`, `manual` →
-**verification**. Outcome is `pass` | `fail` | `unknown` (default
-`unknown` — never counts as evidence for promotion).
+Required: `uid`, `capability_id`, `kind`, `outcome`. Optional: `scenario`,
+`locator`, `date`, `commit`, `branch`, `version`, `environment`,
+`platform`, `notes`, `supersedes`, `source_fingerprint`. Only the required
+fields are needed for old/simple records — everything else is opt-in.
+
+**Kinds prove different things.** No kind universally "outranks" another:
+
+| existence-level (proves something exists or ran) | verification-level (demonstrates behavior) |
+| --- | --- |
+| `file_change`, `command_result`, `diagnostic`, `inspection`, `build_result` | `test_result`, `integration_test`, `e2e_test`, `review`, `manual`, `visual_review`, `accessibility_test` |
+
+- a unit test may prove behavior in isolation
+- an end-to-end test may prove integrated behavior
+- manual or visual evidence may prove interaction or visual behavior that
+  automation does not capture
+- file existence alone proves very little
+
+**Append, never rewrite.** Historical evidence is never edited or deleted.
+A new record is appended; the old one stays as history. This is what makes
+regressions visible.
+
+## Freshness and supersession
+
+Historical PASS is not permanent proof. Current state is derived from
+**active** evidence — the most recent relevant evidence, or explicit
+supersession:
+
+```json
+{ "uid": "EV-042", "supersedes": ["EV-041"] }
+```
+
+Rules:
+
+- latest active verification PASS may support `verified`
+- latest active implementation PASS may support `implemented`
+- later FAIL evidence invalidates earlier PASS evidence for current-state
+  derivation, unless a still-later PASS supersedes or resolves it
+- superseded evidence is preserved but no longer authoritative
+- when chronology cannot be determined confidently (e.g. PASS and FAIL
+  with no dates), the checker reports **RECONCILIATION REQUIRED** instead
+  of silently choosing
+
+The checker validates supersession references (no dangling targets, no
+cycles) and reports stale/superseded evidence counts.
+
+## Verification scenarios
+
+Optional, for capabilities whose claim contains multiple meaningful
+behaviors:
+
+```yaml
+verification:
+  scenarios:
+    - id: dock-left
+      description: Dock a panel to the left region.
+    - id: dock-right
+      description: Dock a panel to the right region.
+    - id: persist-layout
+      description: Restart application and restore docking layout.
+```
+
+Evidence may reference a scenario:
+
+```json
+{ "uid": "EV-105", "capability_id": "panel-docking", "scenario": "persist-layout", "kind": "e2e_test", "outcome": "pass" }
+```
+
+The checker validates scenario references and shows scenario coverage. A
+capability claiming `verified` with declared scenarios must have
+verification-level pass evidence for every scenario — otherwise the
+checker reports RECONCILIATION REQUIRED. Projects that do not need
+scenarios simply omit them.
+
+## What makes a capability verified
+
+Verification comes from **verification-level evidence itself** — an active
+`test_result`, `integration_test`, `e2e_test`, `review`, `manual`,
+`visual_review`, or `accessibility_test` with outcome `pass` — not from a
+string in `verified_by`. `verified_by` remains as optional contextual
+metadata:
+
+```yaml
+verified_by:
+  - PR-214
+  - release-1.4.0
+```
+
+but it never substitutes for evidence. A capability is `verified` because
+active verification-level evidence supports its claim. (Legacy maps that
+used `verified_by` as the gate keep working, but produce a warning telling
+you to add real verification evidence.)
+
+## UI and support functions are first-class capabilities
+
+The most common failure mode this map prevents: the core product works,
+then someone says "now give it a good UI" — and the UI is terrible,
+because its support functions were never enumerated, so the agent
+improvises UI plumbing mid-flight. UI infrastructure is **ordinary product
+capability**, not secondary polish. Enumerate it on the map from the start:
+
+- **State** — loading, error, empty, stale, optimistic state, undo/redo,
+  persistence.
+- **Interaction** — form validation, keyboard controls, focus management,
+  drag/drop, selection, search, filter, pagination, contextual menus.
+- **Presentation** — responsive layout, themes, typography, density,
+  icons, localization, visual hierarchy.
+- **Feedback** — progress, errors, warnings, confirmations, toasts,
+  skeleton states.
+- **Accessibility** — keyboard navigation, ARIA, contrast, screen-reader
+  flow, reduced motion, scalable text.
+- **Data** — fetch, cache, refresh, invalidation, offline handling, retry,
+  staleness indicators.
+
+Then the map reads like a build order: with the core `implemented` /
+`verified` and the UI capabilities `not_implemented`, the report's gap
+list IS the UI checklist. A working product whose support capabilities are
+all `not_implemented` is not "done, plus needs UI"; it is a product whose
+gap list happens to be the entire UI.
+
+## How agents use the map
+
+**Before implementation:**
+
+1. Search aliases, tags, IDs, and claims for the requested behavior.
+2. Determine whether it already exists.
+3. Inspect dependencies and dimensions.
+4. Follow active evidence.
+5. Identify gaps or stale verification.
+6. Build only the missing or broken portion.
+7. Add fresh evidence after work.
+8. Update current state without deleting history.
+9. Re-run the checker.
+
+**Before answering "does the product support X?",** answer from:
+
+- the capability's `claim`
+- its current status
+- its dimensions
+- its active evidence
+- known regressions
+
+— not from memory or source-code name matching alone. If no capability
+matches, the honest answer is "not in the map" — which is itself a product
+gap to surface.
 
 ## Method — create the map
 
-1. **Inventory.** From the product spec (architecture, port-source table,
-   feature lists) enumerate every user-visible behavior the product must
-   support, grouped by area. Cover the whole product: implemented, partial,
-   and not-yet-started. One capability = one user-visible behavior, with a
-   stable kebab-case id (e.g. `auth-login`, `panel-docking`).
+1. **Inventory.** From the product spec or feature lists, enumerate every
+   user-visible behavior the product must support, grouped by area. Cover
+   the whole product: implemented, partial, not-yet-started, and
+   un-inspected. Include support/UI functions (§UI) alongside core
+   behaviors. One capability = one observable behavior with a stable
+   kebab-case id (e.g. `auth-login`, `panel-docking`).
    Completion: every spec'd behavior appears exactly once.
 
-2. **Declare.** Write `capabilities.yaml` as above — every capability with
-   `status: not_implemented` and `evidence: []` initially. The engine
-   (checker) enforces one status per capability; when per-dimension
-   granularity matters (backend / api / ui / tests / docs), split into
-   sibling capabilities (`panel-docking-backend`, `panel-docking-ui`) or
-   record the split in `dimensions`.
-   Completion: file parses and the checker runs clean.
+2. **Declare.** Write `capabilities.yaml` — every capability with
+   `id`, `name`, `area`, `claim`, and an initial state (`unknown` if not
+   yet inspected, otherwise `not_implemented`). Add aliases/tags,
+   dependencies, sources, and dimensions as they become known.
+   Completion: the checker runs clean (warnings about missing claims
+   acceptable at first).
 
-3. **Evidence.** When a capability exists and works, write an evidence JSON
-   under `capabilities/evidence/` (prefer `test_result` with the actual
-   test file as `locator`) and add its `uid` to the capability's
-   `evidence` list. Never reference an evidence file that does not exist.
-   Completion: every promoted capability has ≥1 resolving evidence ref.
+3. **Evidence.** When a capability exists and works, append an evidence
+   JSON under `capabilities/evidence/` (prefer a verification-level kind
+   with the actual test as `locator`) and cite its `uid` in the
+   capability's `evidence` list. Never reference an evidence file that
+   does not exist.
+   Completion: every promoted capability has at least one resolving
+   active evidence ref.
 
-4. **Promote to implemented.** Set `status: implemented` in the YAML —
-   only when step 3's evidence (outcome `pass`) is in place. The checker
-   will reject a status the evidence does not support.
+4. **Set state from evidence.** Declare `implemented` only with
+   implementation-level pass evidence; declare `verified` only with
+   verification-level pass evidence. The checker will reject a state the
+   evidence does not support.
 
-5. **Promote to verified.** Only when a task / PR / release actually
-   verified the capability: add verification-level evidence (e.g. a
-   `review` or fresh `test_result`) AND set `verified_by` to that task /
-   PR / release reference. Never promote on a bare file edit.
-
-6. **Commit the map.** Commit `capabilities.yaml` and the evidence files
+5. **Commit the map.** Commit `capabilities.yaml` and the evidence files
    with the change that created/updated the capability — the map and its
    proof are declarative knowledge. Never commit runtime traces or logs
    into the evidence directory.
 
 ## Automatic maintenance — keep the map current
 
-Statuses change only through the gate, never by hand-editing to make the
-checker pass. Wire these triggers into the normal completion flow so the
-map updates in the same turn as the work — a map maintained only
-"sometimes" is a manual document again.
+State changes only through the policy — evidence first, explicit reasons
+for demotion — never by hand-editing to make the checker pass. Wire these
+triggers into the normal completion flow so the map updates in the same
+turn as the work:
 
 1. **Every change / task completion.** Run the affected tests. For each
-   capability with passing results, write the `test_result` evidence,
-   reference it, and promote to `implemented`. Then run the checker.
-2. **On VERIFIED task / PR / release.** When a task or release is
-   verified, add verification-level evidence and set `verified_by` so the
-   capability reaches `verified` in the same change.
-3. **On regression.** A failing test means: write the FAIL evidence (never
-   delete or edit old evidence), re-run the checker — it flags the
-   mismatch. Then either fix and add fresh pass evidence, or demote with an
-   explicit `regression:` note in the description. Never silently edit a
-   status down.
-4. **Session start / periodic.** Run the checker. Reconcile: every YAML
-   capability present, every `implemented` / `verified` status explainable
-   by resolving evidence. Investigate anything that is not.
-5. **Spec changes.** When the product spec adds or changes behavior, extend
-   `capabilities.yaml` in the same change. Never delete a capability id —
-   ids are stable identifiers; add `deprecated: true` instead.
-
-## Reading and using the map
-
-The map is a decision surface, not a trophy. Read it before planning,
-building, shipping, or answering "does the product support X?".
-
-**How to read a status:**
-
-- `not_implemented` — promised or planned, no working evidence yet. A gap.
-- `implemented` — exists and works, backed by pass evidence (tests, command
-  results).
-- `verified` — additionally confirmed by an independent task / PR / release;
-  `verified_by` says which. Stronger than "we tested it".
-- `deprecated: true` — historical, not planned anymore; kept for
-  traceability.
-- Dimensions tell you WHERE a capability is thin: `backend: implemented`
-  with `ui: partial` means the backend exists but the surface does not.
-
-**How to read the evidence:**
-
-- Follow `evidence` refs to the JSON files: `kind` says what proved it
-  (`test_result` outranks `manual`), `locator` points at the artifact (test
-  file, command), `date` says when.
-- FAIL evidence = a regression the map is not allowed to hide.
-- An evidence ref with no file (the checker flags it) = the claim lost its
-  proof — treat the status as unproven until re-recorded.
-
-**How to use it:**
-
-1. **Before building** — check whether the capability already exists. If
-   `implemented`, don't rebuild: extend the evidence. If thin (partial
-   dimension), finish the thin part instead of starting over.
-2. **Planning / roadmap** — the diff between the product spec and the map
-   IS the roadmap: every `not_implemented` gap is planned work or a
-   deliberate exclusion. Prioritize against gaps, not vibes.
-3. **Release readiness** — a release claims capabilities; ship only the
-   ones whose status + evidence back the claim. `verified` + `verified_by`
-   is what a changelog or release note should cite.
-4. **Answering questions** — "does the product support X?" is answered from
-   the map: status + evidence locators, never from memory. A question with
-   no capability is answered "not implemented" — which is also a product
-   gap to surface, not hide.
-5. **Onboarding / handoff** — a new session or contributor reads the map
-   and the evidence trail instead of re-discovering the product. The map is
-   durable product knowledge; keep it committed and current.
-6. **Audit** — when a claim is challenged, the map is the single source of
-   truth: status must be derivable from linked evidence (the checker
-   enforces it). Anything else is opinion.
+   capability with passing results, append the evidence, cite it, and set
+   the state the evidence supports. Then run the checker.
+2. **On VERIFIED task / PR / release.** Add verification-level evidence
+   and set `verified` (plus `verified_by` as context) in the same change.
+3. **On regression.** A failing test means: append the FAIL evidence
+   (never delete or edit old evidence), demote with an explicit
+   `regression:` reason, and let the checker confirm. Then fix and append
+   fresh pass evidence — the history shows the full arc.
+4. **Session start / periodic.** Run the checker and the report. Reconcile
+   gaps, unknown capabilities, regressions, and any RECONCILIATION
+   REQUIRED items. Investigate anything whose state the evidence does not
+   explain.
+5. **Spec changes.** When the product spec adds or changes behavior,
+   extend `capabilities.yaml` in the same change. Never delete a
+   capability id — ids are stable; add `deprecated: true` instead.
 
 ## Mechanical check
 
-Run the bundled checker after every map change and at session start:
-
 ```bash
-python <skill_dir>/scripts/check_capabilities.py <project_root>
+python scripts/check_capabilities.py .                    # validation
+python scripts/check_capabilities.py --report .           # human-readable report
+python scripts/check_capabilities.py --report --gaps .    # filtered report
+python scripts/check_capabilities.py --report --area workspace .
+python scripts/check_capabilities.py --report --capability panel-docking .
+python scripts/check_capabilities.py --json .             # machine-readable report
 ```
 
-It validates: YAML parses and every capability has `id`/`name`/`area`;
-every evidence ref resolves to a file; every evidence file targets a known
-capability; declared status equals the status the evidence derives;
-`verified` has verification-level pass evidence and `verified_by`; FAIL
-evidence is flagged as a regression. Exit code 0 = consistent, 1 =
-problems (each printed as `[x] ...`). Requires PyYAML (`pip install pyyaml`
-if missing).
+Filters: `--gaps`, `--regressions`, `--unknown`, `--partial`,
+`--deprecated`, `--reconciliation`, `--area AREA`, `--capability ID`.
+`--json` emits a structured report for tooling.
 
-For a human-readable readout — the quick way to READ the map before
-planning, release, or at session start:
+Exit codes: `0` = consistent (warnings may still be printed); `1` =
+structural errors and/or RECONCILIATION REQUIRED items.
 
-```bash
-python <skill_dir>/scripts/check_capabilities.py --report <project_root>
+The checker validates: duplicate/malformed capability IDs, allowed status
+values, missing required fields, duplicate evidence UIDs, missing evidence
+`uid`/`capability_id`/`kind`/`outcome`, invalid kinds/outcomes, malformed
+dates, evidence targeting unknown capabilities, dangling capability
+evidence references, unreferenced evidence files, missing dependency IDs,
+self-dependencies, dependency cycles, malformed aliases/tags/dimensions/
+source records, malformed scenario references, duplicate scenario IDs,
+invalid `supersedes` references, supersession cycles, and — where
+practical — local `locator` existence (remote, conceptual, command, and PR
+locators are never failed).
+
+## Reconciliation
+
+When evidence conflicts or current state cannot be derived safely, the
+checker prints **RECONCILIATION REQUIRED** and exits `1` — it never
+silently guesses. Examples:
+
+- latest PASS and FAIL have ambiguous ordering
+- evidence references contradictory current commits
+- supersession graph is invalid
+- declared status does not match usable evidence
+- verification scenario coverage is incomplete but the state says verified
+
+A reconciliation item means a human or agent must look at the evidence and
+resolve the conflict explicitly — by appending resolving evidence, by
+correcting the declared state with an explicit reason, or by fixing the
+schema.
+
+## Backward compatibility
+
+Maps written for the older three-state format (`not_implemented`,
+`implemented`, `verified`) keep working:
+
+- old states are a subset of the new vocabulary
+- old evidence files (uid/capability_id/kind/outcome/locator/date) remain
+  valid; all new fields are optional
+- `verified_by` as a string is accepted (legacy pattern) and produces a
+  warning instead of an error — the new rule is verification comes from
+  evidence
+- old maps whose implementation evidence would now support `verified`
+  produce a "consider promoting" warning, not an error
+
+No migration is required to upgrade; the warnings tell you what to tighten
+when you are ready.
+
+## Project layout
+
+```text
+capabilities.yaml                  # declaration + declared state
+capabilities/
+  evidence/
+    EV-001.json                    # one evidence record per file
 ```
 
-Prints capabilities grouped by area with their status, status counts, the
-gap list (`not_implemented`), and any regressions — same exit-code
-semantics as the plain check.
+One-evidence-file-per-record stays the default: it is easy to inspect in
+git diffs and trivially appendable. Very large projects may later move to
+an immutable JSONL ledger or another append-oriented evidence store, but
+nothing in the current format requires it.
 
 ## Pitfalls
 
-- Declaring `implemented` with no pass evidence → checker error. That is
-  the design: add evidence first.
-- An evidence ref without a file (or an evidence file nothing references)
-  → stale; the checker flags it.
-- `verified` without `verified_by`, or `verified_by` without
-  verification-level pass evidence → checker error.
-- `file_change` / `command_result` evidence is implementation-level; only
-  `test_result`, `review`, `manual` can support `verified`.
-- Deleting or rewriting old evidence to hide a regression is worse than the
-  regression — append FAIL evidence and let the map tell the truth.
-- Editing a status to match a wish instead of the evidence: the checker
-  derives status from evidence and will not agree.
+- Declaring `implemented`/`verified` with no usable evidence → checker
+  error. Add evidence first.
+- A later FAIL with no `regression:` reason → RECONCILIATION REQUIRED.
+  Demotions are allowed; silent ones are not.
+- Deleting or rewriting old evidence to hide a regression is worse than
+  the regression — append FAIL evidence and let the map tell the truth.
+- Treating ancient PASS as proof: current state comes from the latest
+  active evidence, not the first PASS ever recorded.
+- `verified_by` is context, not proof. Verification needs verification-
+  level evidence.
+- Dependencies are planning info — never auto-promote a capability because
+  its dependencies are done.
+- Editing state to match a wish instead of evidence: the checker derives
+  state from evidence and will not agree.
+- `unknown` is not `not_implemented`. No evidence means "not yet
+  inspected", not "absent".
+- Missing claims: a capability without a claim is a label, and labels do
+  not tell you what to verify.
 
 ## Verification
 
-- [ ] `python <skill_dir>/scripts/check_capabilities.py .` exits 0.
-- [ ] Every capability in the YAML appears exactly once with a stable id.
-- [ ] Every `implemented` capability has ≥1 resolving pass evidence.
-- [ ] Every `verified` capability has verification-level pass evidence and
-      a `verified_by` reference.
-- [ ] No FAIL evidence is ignored; each is answered by a fix + pass
-      evidence or an explicit `regression:` note.
-- [ ] Map reflects the last completed change (statuses match fresh
-      evidence), and the map + evidence are committed.
+- [ ] `python scripts/check_capabilities.py .` exits 0.
+- [ ] `python scripts/check_capabilities.py --report .` matches reality:
+      gaps, unknowns, regressions, and reconciliation items are all
+      expected or resolved.
+- [ ] Every capability has a stable kebab-case id and a claim phrased as
+      observable behavior.
+- [ ] Every `implemented` capability has at least one resolving active
+      implementation-level pass evidence.
+- [ ] Every `verified` capability has active verification-level pass
+      evidence (scenario coverage complete when scenarios are declared).
+- [ ] Every demotion carries an explicit `regression:` / `state_change_reason:`.
+- [ ] Historical evidence is never edited or deleted; regressions are
+      visible as FAIL records.
+- [ ] `tests/run_tests.py` passes after checker changes.
+- [ ] The map and its evidence are committed with the change they describe.

@@ -1,0 +1,1 @@
+{"uid": "EV-005", "capability_id": "layout-state", "kind": "command_result", "outcome": "pass", "locator": "scripts/smoke_layout_persistence.sh", "date": "2026-08-27", "notes": "Layout persistence smoke script completes."}

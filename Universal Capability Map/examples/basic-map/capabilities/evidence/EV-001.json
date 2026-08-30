@@ -1,0 +1,1 @@
+{"uid": "EV-001", "capability_id": "auth-login", "kind": "test_result", "outcome": "pass", "scenario": "login-success", "locator": "tests/test_auth.py::test_login", "date": "2026-08-30", "commit": "abc1234", "branch": "main", "version": "1.4.0", "notes": "Valid credentials accepted; session created."}
