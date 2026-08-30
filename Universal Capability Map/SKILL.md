@@ -39,6 +39,39 @@ tells the product what it delivers. It is:
   `implemented` → `verified`. Never demote silently; regression is recorded
   as FAIL evidence and flagged, not hidden.
 
+## The map is a UI checklist
+
+The most common failure mode this map exists to prevent: the core product
+works, then someone says "now give it a good UI" — and the UI is terrible,
+because its support functions were never enumerated, so the agent improvises
+UI plumbing mid-flight.
+
+Avoid it by making UI support functions first-class capabilities from the
+start. Every capability the interface needs goes on the map with evidence,
+just like the core:
+
+- **State** — single source of truth, loading / error / empty states,
+  optimistic updates, undo-redo.
+- **Interaction** — forms + validation, keyboard navigation, drag-and-drop,
+  focus management, pagination / search / filter.
+- **Presentation** — theme tokens, responsive layout, density, typography,
+  iconography.
+- **Feedback** — toasts, progress indicators, skeletons, error boundaries.
+- **Accessibility** — ARIA, contrast, screen-reader flow, reduced motion.
+- **Data** — fetch / cache / refresh, offline behavior, staleness
+  indicators.
+
+Then the map reads like a build order. With the core `implemented` /
+`verified` and the UI capabilities `not_implemented` (or `ui: partial`
+dimensions), the `--report` gap list IS the UI checklist. Building the UI
+means executing those capabilities one at a time — each with its own
+evidence (component tests, visual review, manual interaction walkthrough)
+— instead of improvising on top of a finished core.
+
+A working product whose UI capabilities are all `not_implemented` is not
+"done, plus needs UI"; it is a product whose gap list happens to be the
+entire UI.
+
 ## The promotion gate (hard rule)
 
 | target | requires |

@@ -2,7 +2,10 @@
 
 An evidence-backed, product-wide map of what a product actually supports —
 create it, keep it current automatically, and read it before building,
-planning, shipping, or answering "does the product support X?".
+planning, shipping, or answering "does the product support X?". It doubles
+as a UI checklist: enumerate the interface's support functions (state,
+interaction, presentation, feedback, accessibility, data) as capabilities,
+and the map's gap list becomes the UI build order.
 
 - **Skill**: see [`SKILL.md`](SKILL.md) for the full workflow (create →
   maintain → read/use → audit).
